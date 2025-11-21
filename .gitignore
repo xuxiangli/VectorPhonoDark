@@ -1,7 +1,10 @@
 # macOS
 .DS_Store
 
-# output files
+# scripts, notebooks and output files
+scripts/
+notebooks/
+output/
 *.csv
 *.hdf5
 
