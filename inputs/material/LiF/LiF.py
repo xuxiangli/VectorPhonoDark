@@ -9,7 +9,7 @@
     appropriate values.
 """
 import numpy as np
-import src.constants as const
+from vectorphonodark import constants as const
 
 material = 'LiF'
 

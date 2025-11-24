@@ -2,12 +2,12 @@ import numpy as np
 
 import vsdm
 
-from src import constants as const
-from src import utility
+from vectorphonodark import constants as const
+from vectorphonodark import utility
 
 
 """Inputs start here"""
-output_path = './'
+output_path = ''
 
 mass_list = [10**6] # in eV
 fn_list = [0]
@@ -25,13 +25,13 @@ numerics_params = {
     'q_cut': True               # whether to compute q_cut from Debye-Waller factor
     }
 form_factor_path = {
-    10**5: output_path+'out/form_factor/GaAs_100keV_hadrophilic_64_25_25',
-    10**6: output_path+'out/form_factor/GaAs_1MeV_hadrophilic_64_25_25'
+    10**5: output_path+'output/form_factor/GaAs/100keV/GaAs_100keV_hadrophilic_64_25_25',
+    10**6: output_path+'output/form_factor/GaAs/1MeV/GaAs_1MeV_hadrophilic_64_25_25'
     }
 file_params = {
-    'vdf_path': output_path+'out/vdf/shm_230_240_600_128_25_25',
+    'vdf_path': output_path+'output/vdf/shm_230_240_600_128_25_25',
     'form_factor_path': form_factor_path,
-    'mcalI_path': output_path+'out/mcalI/mcalI_5_31_31'
+    'mcalI_path': output_path+'output/mcalI/mcalI_5_31_31'
     }
 """Inputs end here"""
 

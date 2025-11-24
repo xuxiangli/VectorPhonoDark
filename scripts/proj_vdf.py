@@ -3,15 +3,14 @@ import os
 import numba
 from scipy import special
 
-from src import constants as const
-from src import physics
-from src import utility
-from src import projection
+from vectorphonodark import constants as const
+from vectorphonodark import physics
+from vectorphonodark import utility
+from vectorphonodark import projection
 
 
 """Inputs start here"""
-input_path = './'
-output_path = './'
+output_path = ''
 
 v_max = (const.VESC + const.VE) * 1.
 
@@ -57,16 +56,9 @@ numerics_params = {
     }
 file_params = {
     'vdf_model': 'shm',
-    'csvname': output_path+'out/vdf/shm_230_240_600_128_25_25'
+    'csvname': output_path+'output/vdf/shm_230_240_600_128_25_25'
     }
-
-numerics_input = input_path+'inputs/numerics/standard.py'
 """Inputs end here"""
-
-
-num_input_mod_name = os.path.splitext(os.path.basename(numerics_input))[0] 
-
-num_mod = utility.import_file(num_input_mod_name, os.path.join(numerics_input))
 
 
 projection.proj_vdf(n_max=n_max, l_max=l_max, vdf=vdf_shm,

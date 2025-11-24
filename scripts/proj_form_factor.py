@@ -2,15 +2,15 @@ import os
 
 import phonopy
 
-from src import constants as const
-from src import phonopy_funcs
-from src import utility
-from src import projection
+from vectorphonodark import constants as const
+from vectorphonodark import phonopy_funcs
+from vectorphonodark import utility
+from vectorphonodark import projection
 
 
 """Inputs start here"""
-input_path = './'
-output_path = './'
+input_path = ''
+output_path = ''
 
 mass = 10**6 # in eV
 q_max = 2*mass*(const.VESC + const.VE) # maximal momentum transfer in eV
@@ -35,7 +35,7 @@ numerics_params = {
     }
 file_params = {
     'modelname': 'GaAs',
-    'csvname': output_path+'out/form_factor/GaAs/1MeV/GaAs_1MeV_hadrophilic_64_25_25'
+    'csvname': output_path+'output/form_factor/GaAs/1MeV/GaAs_1MeV_hadrophilic_64_25_25'
     }
 
 material_input = input_path+'inputs/material/GaAs/GaAs.py'

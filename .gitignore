@@ -2,8 +2,8 @@
 .DS_Store
 
 # scripts, notebooks and output files
-scripts/
-notebooks/
+# scripts/
+# notebooks/
 output/
 *.csv
 *.hdf5

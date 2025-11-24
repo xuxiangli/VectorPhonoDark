@@ -4,15 +4,15 @@ import time
 import phonopy
 import vsdm
 
-from src import constants as const
-from src import phonopy_funcs
-from src import utility
-from src import physics
+from vectorphonodark import constants as const
+from vectorphonodark import phonopy_funcs
+from vectorphonodark import utility
+from vectorphonodark import physics
 
 
 """Inputs start here"""
-input_path = './'
-output_path = './'
+input_path = ''
+output_path = ''
 
 mass = 10**5
 
@@ -30,7 +30,7 @@ numerics_params = {
     }
 file_params = {
     'modelname': 'GaAs',
-    'hdf5name': output_path+'out/mcalI/mcalI_5_31_31'
+    'hdf5name': output_path+'output/mcalI/mcalI_5_31_31'
     }
 
 material_input = input_path+'inputs/material/GaAs/GaAs.py'
