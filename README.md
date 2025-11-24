@@ -19,5 +19,5 @@ In `scripts/` you can find four scripts for
 Before running the scripts, please run the following command in terminal such that python knows the directory of the package:
 
 ```shell
-pip install -e pyproject.toml
+pip install -e .
 ```
