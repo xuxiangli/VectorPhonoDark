@@ -52,10 +52,14 @@ def generate_mesh_ylm_jacob(u_max, n_r, n_theta, n_phi,
 
     dx          = 1.0 / n_r
     x_list      = np.linspace(dx/2, 1.0 - dx/2, n_r)
-    x_list      = np.power(x_list, power_r)
+    if power_r != 1:
+        x_list      = np.power(x_list, power_r)
 
-    jacob_vals  = np.array([(u_max * x)**2 * u_max*(power_r*np.power(x, 1-1/power_r)*dx) 
-                            * dcostheta * dphi for x in x_list])
+    if power_r == 1:
+        jacob_vals  = np.array([x**2 * dx * dcostheta * dphi for x in x_list])
+    else:
+        jacob_vals  = np.array([x**2 * (power_r*np.power(x, 1-1/power_r)*dx) 
+                                * dcostheta * dphi for x in x_list])
 
     u_sph_list  = np.array([[u_max * x, theta, phi] 
                             for x in x_list for theta in theta_list for phi in phi_list]

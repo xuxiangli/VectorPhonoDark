@@ -34,7 +34,10 @@ kmet_per_sec_to_none     = 3.34*10**(-6)
 #####
 
 # fine structure constant
-ALPHA_EM                 = 1.0/137.0
+ALPHA_EM                 = 1.0/137.036
+
+# Reference momentum transfer
+Q_BOHR                   = M_ELEC*ALPHA_EM
 
 # dark matter density
 RHO_DM                   = 0.4*GeV_To_eV*invcmet_To_eV**3 # 0.4

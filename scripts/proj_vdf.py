@@ -1,5 +1,4 @@
 import numpy as np
-import os
 import numba
 from scipy import special
 
@@ -10,7 +9,7 @@ from vectorphonodark import projection
 
 
 """Inputs start here"""
-output_path = ''
+output_path = '/Users/jukcoeng/Desktop/Dark_Matter/Vector Space Integration/VectorPhonoDark/'
 
 v_max = (const.VESC + const.VE) * 1.
 
@@ -40,15 +39,15 @@ n0_factor = np.pi**(3/2) * v_0**2 * (
         )
 
 n_max = 2**7 - 1                # maximal radial basis index
-l_max = 50                      # maximal angular basis index
+l_max = 8                       # maximal angular basis index
 physics_params = {
     'v_max': v_max,             # maximal velocity in eV
     'vdf_params': (v_0, v_e, v_esc, n0_factor) # parameters for vdf function, in order
     }
 numerics_params = {
     'n_r':          128,        # number of r grid points
-    'n_theta':      25,         # number of theta grid points
-    'n_phi':        25,         # number of phi grid points
+    'n_theta':      180,        # number of theta grid points
+    'n_phi':        180,        # number of phi grid points
     'power_r':      1,          # power for r grid spacing
     'power_theta':  1,          # power for theta grid spacing
     'power_phi':    1,          # power for phi grid spacing
@@ -56,7 +55,7 @@ numerics_params = {
     }
 file_params = {
     'vdf_model': 'shm',
-    'csvname': output_path+'output/vdf/shm_230_240_600_128_25_25'
+    'csvname': output_path+'output/vdf/shm_230_240_600_128_180_180'
     }
 """Inputs end here"""
 

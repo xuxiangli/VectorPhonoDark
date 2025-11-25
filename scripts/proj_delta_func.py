@@ -11,14 +11,15 @@ from vectorphonodark import physics
 
 
 """Inputs start here"""
-input_path = ''
-output_path = ''
+input_path = '/Users/jukcoeng/Desktop/Dark_Matter/Vector Space Integration/VectorPhonoDark/'
+output_path = '/Users/jukcoeng/Desktop/Dark_Matter/Vector Space Integration/VectorPhonoDark/'
 
-mass = 10**5
+mass = 10**8
+fn_list = [0, 2]
 
 l_max = 5
 nv_max = 31
-nq_max = 31
+nq_max = 127
 
 physics_params = {
     'threshold': 1e-3           # eV
@@ -26,11 +27,11 @@ physics_params = {
 numerics_params = {
     'energy_bin_width': 1e-3,   # eV
     'energy_max': 0.10723,      # eV, maximal energy for all materials considered
-    'q_cut': True               # whether to compute q_cut from Debye-Waller factor
+    'q_cut': False               # whether to compute q_cut from Debye-Waller factor
     }
 file_params = {
     'modelname': 'GaAs',
-    'hdf5name': output_path+'output/mcalI/mcalI_5_31_31'
+    'hdf5name': output_path+'output/mcalI/mcalI_5_31_128'
     }
 
 material_input = input_path+'inputs/material/GaAs/GaAs.py'
@@ -94,13 +95,13 @@ energy_bin_width    = numerics_params['energy_bin_width']
 energy_max          = numerics_params['energy_max']
 energy_bin_num      = int((energy_max - energy_threshold)/energy_bin_width) + 1
 
-for fn in [0, 2]:
+for fn in fn_list:
     print(f"\n    Projecting f_n = {fn}...")
     for i_bin in range(energy_bin_num):
         if i_bin % (energy_bin_num // 5 + 1) == 0:
                 print(f"      Projecting energy bin {i_bin}/{energy_bin_num-1}...")
         energy = energy_threshold + (i_bin + 0.5)*energy_bin_width
-        dm_model = dict(mX=mass, fdm_n=fn, mSM=const.M_NUCL, DeltaE=energy)
+        dm_model = dict(mX=mass, fdm=fn, mSM=const.M_NUCL, DeltaE=energy)
 
         mI = vsdm.McalI(basis_v, basis_q, dm_model, 
                         mI_shape=(l_max+1, nv_max+1,nq_max+1), 

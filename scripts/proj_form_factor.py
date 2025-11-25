@@ -9,33 +9,33 @@ from vectorphonodark import projection
 
 
 """Inputs start here"""
-input_path = ''
-output_path = ''
+input_path = '/Users/jukcoeng/Desktop/Dark_Matter/Vector Space Integration/VectorPhonoDark/'
+output_path = '/Users/jukcoeng/Desktop/Dark_Matter/Vector Space Integration/VectorPhonoDark/'
 
-mass = 10**6 # in eV
+mass = 10**8 # in eV
 q_max = 2*mass*(const.VESC + const.VE) # maximal momentum transfer in eV
 
-n_max = 2**6 - 1                # maximal radial basis index
+n_max = 2**7 - 1                # maximal radial basis index
 l_max = 5                       # maximal angular basis index
 physics_params = {
     'q_max': q_max,
     'threshold': 1e-3           # in eV
     }
 numerics_params = {
-    'n_r':          64,         # number of r grid points
-    'n_theta':      25,         # number of theta grid points
-    'n_phi':        25,         # number of phi grid points
+    'n_r':          128,         # number of r grid points
+    'n_theta':      180,         # number of theta grid points
+    'n_phi':        180,         # number of phi grid points
     'power_r':      1,          # power for r grid spacing
     'power_theta':  1,          # power for theta grid spacing
     'power_phi':    1,          # power for phi grid spacing
     'energy_bin_width': 1e-3,   # eV
     'energy_max_factor': 1.2,   # factor to multiply with Gamma point to get energy cutoff, default: 1.2
     'basis': 'haar',            # basis type
-    'q_cut': True               # whether to compute q_cut from Debye-Waller factor
+    'q_cut': False               # whether to compute q_cut from Debye-Waller factor
     }
 file_params = {
     'modelname': 'GaAs',
-    'csvname': output_path+'output/form_factor/GaAs/1MeV/GaAs_1MeV_hadrophilic_64_25_25'
+    'csvname': output_path+'output/form_factor/GaAs/100MeV/GaAs_100MeV_hadrophilic_128_180_180'
     }
 
 material_input = input_path+'inputs/material/GaAs/GaAs.py'

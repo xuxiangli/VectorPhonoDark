@@ -90,7 +90,7 @@ def sph_to_cart(vec_sph) -> np.ndarray:
 
 
 def getQ(theta, phi):
-    axisphi = phi + np.pi/2 #stationary under R
+    axisphi = phi + np.pi/2 # stationary under R
     axR = theta/2 
     qr = np.cos(axR)
     qi = np.sin(axR) * np.cos(axisphi)
