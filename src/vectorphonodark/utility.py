@@ -13,7 +13,7 @@ from . import phonopy_funcs
 def import_file(full_name, path):
     """
     Import a module from a given file path.
-    
+
     Args:
         full_name: 
             str: The full name to assign to the module.
@@ -52,7 +52,7 @@ def writeFnlm_csv(csvsave_name, f_nlm_coeffs={}, info={}, use_gvar=False) -> Non
                             quoting=csv.QUOTE_MINIMAL)
         if makeHeader:
             bparams = [r'#'] + [str(lbl) + ': ' + str(prm)
-                                    for lbl,prm in info.items()]
+                                for lbl, prm in info.items()]
             writer.writerow(bparams)
             header = [r'#', 'n', 'l', 'm', 'f.mean', 'f.sdev']
             writer.writerow(header)
@@ -90,12 +90,12 @@ def sph_to_cart(vec_sph) -> np.ndarray:
 
 
 def getQ(theta, phi):
-    axisphi = phi + np.pi/2 # stationary under R
-    axR = theta/2 
+    axisphi = phi + np.pi/2  # stationary under R
+    axR = theta/2
     qr = np.cos(axR)
     qi = np.sin(axR) * np.cos(axisphi)
     qj = np.sin(axR) * np.sin(axisphi)
-    qk = 0. 
+    qk = 0.
     return quaternionic.array(qr, qi, qj, qk)
 
 
@@ -115,7 +115,7 @@ def run_phonopy(phonon_file, k_red) -> list[np.ndarray]:
             - omega: An array of shape (num_modes,) representing the phonon frequencies in eV.
     """
 
-    # run phonopy in mesh mode 
+    # run phonopy in mesh mode
     phonon_file.run_qpoints(k_red, with_eigenvectors=True)
 
     mesh_dict = phonon_file.get_qpoints_dict()
@@ -126,14 +126,15 @@ def run_phonopy(phonon_file, k_red) -> list[np.ndarray]:
     omega = 2*const.PI*(const.THz_To_eV)*mesh_dict['frequencies'][0]
 
     num_atoms = phonon_file.primitive.get_number_of_atoms()
-    num_modes = 3*num_atoms 
+    num_modes = 3*num_atoms
 
     # q, nu, i, alpha
     eigenvectors = np.zeros((num_modes, num_atoms, 3), dtype=complex)
 
     # sort the eigenvectors
     for nu in range(num_modes):
-        eigenvectors[nu][:][:] = np.array(np.array_split(eigenvectors_pre.T[nu], num_atoms)).reshape(num_atoms, 3)
+        eigenvectors[nu][:][:] = np.array(np.array_split(
+            eigenvectors_pre.T[nu], num_atoms)).reshape(num_atoms, 3)
 
     return [eigenvectors, omega]
 
@@ -149,36 +150,84 @@ def get_kG_from_q_red(q_red_vec, q_red_to_XYZ):
     """
     set_of_closest_G_red = np.zeros((8, 3), dtype=np.float64)
 
-    set_of_closest_G_red[0] = [math.floor(q_red_vec[0]), math.floor(q_red_vec[1]), math.floor(q_red_vec[2])]
-    set_of_closest_G_red[1] = [math.floor(q_red_vec[0]), math.floor(q_red_vec[1]), math.ceil(q_red_vec[2])]
-    set_of_closest_G_red[2] = [math.floor(q_red_vec[0]), math.ceil(q_red_vec[1]), math.floor(q_red_vec[2])]
-    set_of_closest_G_red[3] = [math.ceil(q_red_vec[0]), math.floor(q_red_vec[1]), math.floor(q_red_vec[2])]
-    set_of_closest_G_red[4] = [math.floor(q_red_vec[0]), math.ceil(q_red_vec[1]), math.ceil(q_red_vec[2])]
-    set_of_closest_G_red[5] = [math.ceil(q_red_vec[0]), math.floor(q_red_vec[1]), math.ceil(q_red_vec[2])]
-    set_of_closest_G_red[6] = [math.ceil(q_red_vec[0]), math.ceil(q_red_vec[1]), math.floor(q_red_vec[2])]
-    set_of_closest_G_red[7] = [math.ceil(q_red_vec[0]), math.ceil(q_red_vec[1]), math.ceil(q_red_vec[2])]
+    set_of_closest_G_red[0] = [
+        math.floor(q_red_vec[0]),
+        math.floor(q_red_vec[1]),
+        math.floor(q_red_vec[2])
+    ]
+    set_of_closest_G_red[1] = [
+        math.floor(q_red_vec[0]),
+        math.floor(q_red_vec[1]),
+        math.ceil(q_red_vec[2])
+    ]
+    set_of_closest_G_red[2] = [
+        math.floor(q_red_vec[0]),
+        math.ceil(q_red_vec[1]),
+        math.floor(q_red_vec[2])
+    ]
+    set_of_closest_G_red[3] = [
+        math.ceil(q_red_vec[0]),
+        math.floor(q_red_vec[1]),
+        math.floor(q_red_vec[2])
+    ]
+    set_of_closest_G_red[4] = [
+        math.floor(q_red_vec[0]),
+        math.ceil(q_red_vec[1]),
+        math.ceil(q_red_vec[2])
+    ]
+    set_of_closest_G_red[5] = [
+        math.ceil(q_red_vec[0]),
+        math.floor(q_red_vec[1]),
+        math.ceil(q_red_vec[2])
+    ]
+    set_of_closest_G_red[6] = [
+        math.ceil(q_red_vec[0]),
+        math.ceil(q_red_vec[1]),
+        math.floor(q_red_vec[2])
+    ]
+    set_of_closest_G_red[7] = [
+        math.ceil(q_red_vec[0]),
+        math.ceil(q_red_vec[1]),
+        math.ceil(q_red_vec[2])
+    ]
 
     # q_XYZ_vec = q_red_to_XYZ @ q_red_vec
-    q_XYZ_vec = [q_red_to_XYZ[0, 0]*q_red_vec[0] + q_red_to_XYZ[0, 1]*q_red_vec[1] + q_red_to_XYZ[0, 2]*q_red_vec[2],
-                  q_red_to_XYZ[1, 0]*q_red_vec[0] + q_red_to_XYZ[1, 1]*q_red_vec[1] + q_red_to_XYZ[1, 2]*q_red_vec[2],
-                  q_red_to_XYZ[2, 0]*q_red_vec[0] + q_red_to_XYZ[2, 1]*q_red_vec[1] + q_red_to_XYZ[2, 2]*q_red_vec[2]]
+    q_XYZ_vec = [
+        q_red_to_XYZ[0, 0]*q_red_vec[0] + q_red_to_XYZ[0, 1]*q_red_vec[1]
+        + q_red_to_XYZ[0, 2]*q_red_vec[2],
+        q_red_to_XYZ[1, 0]*q_red_vec[0] + q_red_to_XYZ[1, 1]*q_red_vec[1]
+        + q_red_to_XYZ[1, 2]*q_red_vec[2],
+        q_red_to_XYZ[2, 0]*q_red_vec[0] + q_red_to_XYZ[2, 1]*q_red_vec[1]
+        + q_red_to_XYZ[2, 2]*q_red_vec[2]
+    ]
 
     first = True
 
     for vec in set_of_closest_G_red:
 
         # diff_vec = q_XYZ_vec - q_red_to_XYZ @ vec
-        diff_vec = [q_XYZ_vec[0] - (q_red_to_XYZ[0, 0]*vec[0] + q_red_to_XYZ[0, 1]*vec[1] + q_red_to_XYZ[0, 2]*vec[2]),
-                    q_XYZ_vec[1] - (q_red_to_XYZ[1, 0]*vec[0] + q_red_to_XYZ[1, 1]*vec[1] + q_red_to_XYZ[1, 2]*vec[2]),
-                    q_XYZ_vec[2] - (q_red_to_XYZ[2, 0]*vec[0] + q_red_to_XYZ[2, 1]*vec[1] + q_red_to_XYZ[2, 2]*vec[2])]
-        diff_vec_sq = diff_vec[0]*diff_vec[0] + diff_vec[1]*diff_vec[1] + diff_vec[2]*diff_vec[2]
-
-        # if first:
-        #     min_dist_sq = np.dot(diff_vec, diff_vec)
-        #     first = False
-
-        # if np.dot(diff_vec, diff_vec) <= min_dist_sq:
-        #     min_vec = vec
+        diff_vec = [
+            q_XYZ_vec[0] - (
+                q_red_to_XYZ[0, 0]*vec[0]
+                + q_red_to_XYZ[0, 1]*vec[1]
+                + q_red_to_XYZ[0, 2]*vec[2]
+            ),
+            q_XYZ_vec[1] - (
+                q_red_to_XYZ[1, 0]*vec[0]
+                + q_red_to_XYZ[1, 1]*vec[1]
+                + q_red_to_XYZ[1, 2]*vec[2]
+            ),
+            q_XYZ_vec[2] - (
+                q_red_to_XYZ[2, 0]*vec[0]
+                + q_red_to_XYZ[2, 1]*vec[1]
+                + q_red_to_XYZ[2, 2]*vec[2]
+            )
+        ]
+        diff_vec_sq = (
+            diff_vec[0]*diff_vec[0]
+            + diff_vec[1]*diff_vec[1]
+            + diff_vec[2]*diff_vec[2]
+        )
 
         if first:
             min_dist_sq = diff_vec_sq
@@ -210,19 +259,35 @@ def get_kG_from_q_XYZ(q_XYZ_vec, q_red_to_XYZ) -> tuple[np.ndarray, np.ndarray]:
 
     set_of_closest_G_red = np.zeros((8, 3), dtype=np.float64)
 
-    set_of_closest_G_red[0] = np.array([math.floor(q_red_vec[0]), math.floor(q_red_vec[1]), math.floor(q_red_vec[2])])
-    set_of_closest_G_red[1] = np.array([math.floor(q_red_vec[0]), math.floor(q_red_vec[1]), math.ceil(q_red_vec[2])])
-    set_of_closest_G_red[2] = np.array([math.floor(q_red_vec[0]), math.ceil(q_red_vec[1]), math.floor(q_red_vec[2])])
-    set_of_closest_G_red[3] = np.array([math.ceil(q_red_vec[0]), math.floor(q_red_vec[1]), math.floor(q_red_vec[2])])
-    set_of_closest_G_red[4] = np.array([math.floor(q_red_vec[0]), math.ceil(q_red_vec[1]), math.ceil(q_red_vec[2])])
-    set_of_closest_G_red[5] = np.array([math.ceil(q_red_vec[0]), math.floor(q_red_vec[1]), math.ceil(q_red_vec[2])])
-    set_of_closest_G_red[6] = np.array([math.ceil(q_red_vec[0]), math.ceil(q_red_vec[1]), math.floor(q_red_vec[2])])
-    set_of_closest_G_red[7] = np.array([math.ceil(q_red_vec[0]), math.ceil(q_red_vec[1]), math.ceil(q_red_vec[2])])
+    set_of_closest_G_red[0] = np.array(
+        [math.floor(q_red_vec[0]), math.floor(q_red_vec[1]), math.floor(q_red_vec[2])]
+    )
+    set_of_closest_G_red[1] = np.array(
+        [math.floor(q_red_vec[0]), math.floor(q_red_vec[1]), math.ceil(q_red_vec[2])]
+    )
+    set_of_closest_G_red[2] = np.array(
+        [math.floor(q_red_vec[0]), math.ceil(q_red_vec[1]), math.floor(q_red_vec[2])]
+    )
+    set_of_closest_G_red[3] = np.array(
+        [math.ceil(q_red_vec[0]), math.floor(q_red_vec[1]), math.floor(q_red_vec[2])]
+    )
+    set_of_closest_G_red[4] = np.array(
+        [math.floor(q_red_vec[0]), math.ceil(q_red_vec[1]), math.ceil(q_red_vec[2])]
+    )
+    set_of_closest_G_red[5] = np.array(
+        [math.ceil(q_red_vec[0]), math.floor(q_red_vec[1]), math.ceil(q_red_vec[2])]
+    )
+    set_of_closest_G_red[6] = np.array(
+        [math.ceil(q_red_vec[0]), math.ceil(q_red_vec[1]), math.floor(q_red_vec[2])]
+    )
+    set_of_closest_G_red[7] = np.array(
+        [math.ceil(q_red_vec[0]), math.ceil(q_red_vec[1]), math.ceil(q_red_vec[2])]
+    )
 
     first = True
 
     for vec in set_of_closest_G_red:
-        
+
         vec = np.ascontiguousarray(vec)
         diff_vec = q_XYZ_vec - q_red_to_XYZ @ vec
 
@@ -273,9 +338,11 @@ def get_G_eigenvectors_omega_from_q_xyz(q_xyz_list, phonon_file, phonopy_params)
     recip_red_to_XYZ = np.array(phonopy_params['recip_red_to_XYZ'])
 
     # get corresponding vector k in the first Brillouin zone and G = q - k
-    k_red_list, G_xyz_list = get_kG_list_from_q_xyz_list(q_xyz_list, recip_red_to_XYZ)
+    k_red_list, G_xyz_list = get_kG_list_from_q_xyz_list(
+        q_xyz_list, recip_red_to_XYZ)
 
     # run phonopy to get polarization vectors and photon energies
-    [ph_eigenvectors, ph_omega] = phonopy_funcs.run_phonopy(phonon_file, k_red_list)
+    [ph_eigenvectors, ph_omega] = phonopy_funcs.run_phonopy(
+        phonon_file, k_red_list)
 
     return G_xyz_list, ph_eigenvectors, ph_omega
