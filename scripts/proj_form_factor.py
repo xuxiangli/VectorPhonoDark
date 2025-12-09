@@ -12,31 +12,36 @@ from vectorphonodark import projection
 input_path = '/Users/jukcoeng/Desktop/Dark_Matter/Vector Space Integration/VectorPhonoDark/'
 output_path = '/Users/jukcoeng/Desktop/Dark_Matter/Vector Space Integration/VectorPhonoDark/'
 
-mass = 10**8  # in eV
+l_list = list(range(6))
+n_list = list(range(2**7))
+
+mass = 10**7  # in eV
 q_max = 2*mass*(const.VESC + const.VE)  # maximal momentum transfer in eV
 
-n_max = 2**7 - 1                # maximal radial basis index
-l_max = 5                       # maximal angular basis index
 physics_params = {
     'q_max': q_max,
     'threshold': 1e-3           # in eV
 }
 numerics_params = {
-    'n_r':          128,         # number of r grid points
-    'n_theta':      25,         # number of theta grid points
-    'n_phi':        25,         # number of phi grid points
-    'power_r':      1,          # power for r grid spacing
-    'power_theta':  1,          # power for theta grid spacing
-    'power_phi':    1,          # power for phi grid spacing
-    'energy_bin_width': 1e-3,   # eV
-    # factor to multiply with Gamma point to get energy cutoff, default: 1.2
-    'energy_max_factor': 1.2,
-    'basis': 'haar',            # basis type
-    'q_cut': True               # whether to compute q_cut from Debye-Waller factor
+    'l_list':               l_list,
+    'n_list':               n_list,
+    'n_a':                  128,         # number of r grid points
+    'n_b':                  25,         # number of theta grid points
+    'n_c':                  25,         # number of phi grid points
+    'power_a':              1,          # power for r grid spacing
+    # 'power_b':            1,          # power for theta grid spacing
+    # 'power_c':            1,          # power for phi grid spacing
+    'special_mesh':         True,        # whether to use special mesh and wavelets
+    'energy_bin_width':     1e-3,   # eV
+    # factor to multiply with Gamma point to get energy cutoff
+    # default is 4.0 if not specified
+    'energy_max_factor':    1.2,
+    # 'basis':                'haar',            # basis type
+    'q_cut':                False               # whether to compute q_cut from Debye-Waller factor
 }
 file_params = {
     'modelname': 'GaAs',
-    'csvname': output_path+'output/form_factor/GaAs/qcut/GaAs_hadrophilic_128_25_25'
+    'csvname': output_path+'output/form_factor/GaAs/test/GaAs_hadrophilic_10MeV_128_25_25'
 }
 
 material_input = input_path+'inputs/material/GaAs/GaAs.py'
@@ -102,8 +107,10 @@ for key, value in num_mod.numerics_parameters.items():
         numerics_params[key] = value
 
 
-projection.proj_form_factor(n_max=n_max, l_max=l_max,
-                            physics_params=physics_params, numerics_params=numerics_params,
-                            phonopy_params=phonopy_params, file_params=file_params,
-                            phonon_file=phonon_file, c_dict=phys_mod.c_dict,
+projection.proj_form_factor(physics_params=physics_params, 
+                            numerics_params=numerics_params,
+                            phonopy_params=phonopy_params, 
+                            file_params=file_params,
+                            phonon_file=phonon_file, 
+                            c_dict=phys_mod.c_dict,
                             verbose=True)

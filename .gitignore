@@ -4,6 +4,7 @@
 # scripts, notebooks and output files
 # scripts/
 # notebooks/
+*.ipynb
 output/
 *.csv
 *.hdf5

@@ -3,6 +3,7 @@ import math
 import numba
 import os
 import csv
+import h5py
 import quaternionic
 from importlib import util
 
@@ -54,7 +55,7 @@ def writeFnlm_csv(csvsave_name, f_nlm_coeffs={}, info={}, use_gvar=False) -> Non
             bparams = [r'#'] + [str(lbl) + ': ' + str(prm)
                                 for lbl, prm in info.items()]
             writer.writerow(bparams)
-            header = [r'#', 'n', 'l', 'm', 'f.mean', 'f.sdev']
+            header = [r'#n', 'l', 'm', 'f.mean', 'f.sdev']
             writer.writerow(header)
         for nlm in f_nlm_coeffs.keys():
             f = f_nlm_coeffs[nlm]
@@ -65,6 +66,41 @@ def writeFnlm_csv(csvsave_name, f_nlm_coeffs={}, info={}, use_gvar=False) -> Non
             newline = [nlm[0], nlm[1], nlm[2], mean, std]
             writer.writerow(newline)
 
+
+def write_hdf5(hdf5file, groupname, datasetname='data', data=None, info={}) -> None:
+    """
+    Write data to an HDF5 file.
+
+    Args:
+        hdf5file: 
+            str: The path to the HDF5 file.
+        groupname: 
+            str: The name of the group in the HDF5 file.
+        datasetname: 
+            str: The name of the dataset within the group.
+        data: 
+            any: The data to be written to the dataset.
+        info:
+            dict: A dictionary of index names and their corresponding data to be written as separate datasets.
+    """
+
+    with h5py.File(hdf5file, 'a') as h5f:
+        if groupname not in h5f:
+            grp = h5f.create_group(groupname)
+        else:
+            grp = h5f[groupname]
+
+        if datasetname in grp:
+            del grp[datasetname]
+
+        if data is not None:
+            grp.create_dataset(datasetname, data=data)
+
+        for info_name, info_data in info.items():
+            if info_name in grp:
+                del grp[info_name]
+
+            grp.create_dataset(info_name, data=info_data)
 
 @numba.njit
 def sph_to_cart(vec_sph) -> np.ndarray:

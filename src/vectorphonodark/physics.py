@@ -55,6 +55,29 @@ def compute_q_cut(phonon_file, atom_masses):
     return q_cut
 
 
+def get_q_max(q_max, q_cut_option=False, 
+              phonon_file=None, atom_masses=None, 
+              verbose=True):
+    """
+        Returns q_max based on input or Debye-Waller factor
+    """
+
+    if q_cut_option:
+        q_cut = compute_q_cut(phonon_file, atom_masses)
+        if q_cut <= q_max:
+            q_max = q_cut
+            if verbose:
+                print(f"    Adjusted q_max to {q_max:.4f} eV due to Debye Waller factor.")
+        else:
+            if verbose:
+                print(f"    Using specified q_max = {q_max:.4f} eV.")
+    else:
+        if verbose:
+            print(f"    Using specified q_max = {q_max:.4f} eV.")
+
+    return q_max
+
+
 def calculate_W_tensor(phonon_file, num_atoms, atom_masses,
                        n_k_1, n_k_2, n_k_3, q_red_to_XYZ):
     """

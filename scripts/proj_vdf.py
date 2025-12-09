@@ -4,14 +4,11 @@ from scipy import special
 
 from vectorphonodark import constants as const
 from vectorphonodark import physics
-from vectorphonodark import utility
 from vectorphonodark import projection
 
 
 """Inputs start here"""
 output_path = '/Users/jukcoeng/Desktop/Dark_Matter/Vector Space Integration/VectorPhonoDark/'
-
-v_max = (const.VESC + const.VE) * 1.
 
 
 @numba.njit
@@ -38,31 +35,35 @@ n0_factor = np.pi**(3/2) * v_0**2 * (
     - 2 * v_esc / np.sqrt(np.pi) * np.exp(-v_esc**2 / v_0**2)
 )
 
-n_max = 2**7 - 1                # maximal radial basis index
-l_max = 8                       # maximal angular basis index
+l_list = list(range(0, 9))
+n_list = list(range(2**7))
+
+v_max = (const.VESC + const.VE) * 1.
+
 physics_params = {
     'v_max': v_max,             # maximal velocity in eV
-    # parameters for vdf function, in order
+    'vdf': vdf_shm,
     'vdf_params': (v_0, v_e, v_esc, n0_factor)
 }
 numerics_params = {
-    'n_r':          128,        # number of r grid points
-    'n_theta':      180,        # number of theta grid points
-    'n_phi':        180,        # number of phi grid points
-    'power_r':      1,          # power for r grid spacing
-    'power_theta':  1,          # power for theta grid spacing
-    'power_phi':    1,          # power for phi grid spacing
-    'basis': 'haar',            # basis type
+    'l_list':               l_list,
+    'n_list':               n_list,
+    'n_a':                  128,         # number of r grid points
+    'n_b':                  180,         # number of theta grid points
+    'n_c':                  180,         # number of phi grid points
+    'power_a':              1,           # power for r grid spacing
+    # 'power_b':            1,           # power for theta grid spacing
+    # 'power_c':            1,           # power for phi grid spacing
+    # 'basis':                'haar',    # basis type
 }
 file_params = {
     'vdf_model': 'shm',
-    'csvname': output_path+'output/vdf/shm_230_240_600_128_180_180'
+    'csvname': output_path+'output/vdf/shm_230_240_600_128_180_180_new'
 }
 """Inputs end here"""
 
 
-projection.proj_vdf(n_max=n_max, l_max=l_max, vdf=vdf_shm,
-                    physics_params=physics_params,
+projection.proj_vdf(physics_params=physics_params,
                     numerics_params=numerics_params,
                     file_params=file_params,
                     verbose=True)

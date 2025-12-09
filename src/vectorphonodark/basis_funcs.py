@@ -4,6 +4,26 @@ import numba
 
 
 @numba.njit
+def haar_n_to_lam_mu(n) -> tuple[int, int]:
+    """
+    Convert Haar wavelet order n to (lambda, mu) pair.
+
+    Args:
+        n: 
+            int: The order of the Haar wavelet.
+
+    Returns:
+        tuple[int, int]: (lambda, mu) pair representing the scale and index.
+    """
+    assert n >= 0, "Haar wavelet: Order must be non-negative."
+    if n == 0:
+        return -1, -1
+    lam = math.floor(math.log2(n))
+    mu = n - (1 << lam)
+    return lam, mu
+
+
+@numba.njit
 def haar_support(n) -> list[float]:
     """
     Compute the support of the Haar wavelet basis functions of order n.
@@ -16,12 +36,7 @@ def haar_support(n) -> list[float]:
     Returns:
         list[float]: The support indices of the Haar wavelet basis functions.
     """
-    assert n >= 0, "Haar wavelet: Order must be non-negative."
-    if n == 0:
-        lam, mu = 0, -1
-    else:
-        lam = math.floor(math.log2(n))
-        mu = n - (1 << lam)
+    lam, mu = haar_n_to_lam_mu(n)
     
     # n = 0 case
     if mu == -1:
@@ -48,12 +63,7 @@ def haar_value(n, dim: int=3) -> list[float]:
     Returns:
         list[float]: The values of the Haar wavelet basis functions at their support points.
     """
-    assert n >= 0, "Haar wavelet: Order must be non-negative."
-    if n == 0:
-        lam, mu = 0, -1
-    else:
-        lam = math.floor(math.log2(n))
-        mu = n - (1 << lam)
+    lam, mu = haar_n_to_lam_mu(n)
 
     # n = 0 case
     if mu == -1:
@@ -91,12 +101,7 @@ def haar_func(n, x: float, dim: int=3) -> float:
         lam, mu = n
         assert lam >= 0 and mu >= 0, "Haar wavelet: Scale and index must be non-negative."
     elif isinstance(n, int):
-        assert n >= 0, "Haar wavelet: Order must be non-negative."
-        if n == 0:
-            lam, mu = 0, -1
-        else:
-            lam = math.floor(math.log2(n))
-            mu = n - (1 << lam)
+        lam, mu = haar_n_to_lam_mu(n)
     else:
         raise TypeError("Haar wavelet: Input must be an integer or a tuple of two integers.")
 

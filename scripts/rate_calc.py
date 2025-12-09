@@ -10,7 +10,7 @@ from vectorphonodark import utility
 output_path = '/Users/jukcoeng/Desktop/Dark_Matter/Vector Space Integration/VectorPhonoDark/'
 
 mass_list = np.array([10**5, 10**6, 10**7, 10**8])  # in eV
-fn_list = [0, 2]
+fdm_list = [0, 2]
 q0 = mass_list*const.V0  # reference momentum transfer in eV
 events_per_year = 3.0
 
@@ -26,10 +26,10 @@ numerics_params = {
     'energy_bin_num': 34
 }
 form_factor_path = {
-    10**5: output_path+'output/form_factor/GaAs/100keV/GaAs_100keV_hadrophilic_128_180_180',
-    10**6: output_path+'output/form_factor/GaAs/1MeV/GaAs_1MeV_hadrophilic_128_180_180',
-    10**7: output_path+'output/form_factor/GaAs/10MeV/GaAs_10MeV_hadrophilic_128_180_180',
-    10**8: output_path+'output/form_factor/GaAs/100MeV/GaAs_100MeV_hadrophilic_128_180_180'
+    10**5: output_path+'output/form_factor/GaAs/100keV/GaAs_hadrophilic_100keV_512_25_25',
+    10**6: output_path+'output/form_factor/GaAs/1MeV/GaAs_hadrophilic_1MeV_512_25_25',
+    10**7: output_path+'output/form_factor/GaAs/10MeV/GaAs_hadrophilic_10MeV_512_25_25',
+    10**8: output_path+'output/form_factor/GaAs/100MeV/GaAs_hadrophilic_100MeV_128_25_25'
 }
 file_params = {
     'vdf_path': output_path+'output/vdf/shm_230_240_600_128_180_180',
@@ -69,26 +69,26 @@ for i_mass, mass in enumerate(mass_list):
             file_params['form_factor_path'][mass]+'_bin_'+str(i_bin)+'.csv')
         form_factor_list[i_bin] = form_factor
 
-    for fn in fn_list:
+    for fdm in fdm_list:
 
         rate_r = np.zeros(len(rotationlist))
-        factor = const.RHO_DM * v_max**2/q_max * \
-            (q0[i_mass]/const.Q_BOHR)**(2*fn)
+        factor = const.RHO_DM * (q0[i_mass]/const.Q_BOHR)**(2*fdm)
 
         for i_bin in range(energy_bin_num):
             energy = energy_threshold + (i_bin + 0.5)*energy_bin_width
-            dm_model = dict(mX=mass, fdm=fn, mSM=const.M_NUCL, DeltaE=energy)
+            dm_model = dict(mX=mass, fdm=fdm, mSM=const.M_NUCL, DeltaE=energy)
             mcalI = vsdm.McalI(basis_v, basis_q, dm_model,
                                mI_shape=(l_max+1, nv_max+1, nq_max+1),
                                use_gvar=False, do_mcalI=False)
             mcalI.importMcalI(hdf5file=file_params['mcalI_path']+'.hdf5',
-                              modelName=f"({i_bin}, {mass}, {fn})",
+                              modelName=f"({i_bin}, {mass}, {fdm})",
+                            #   modelName=f"{mass:.3e}/{fdm}/{i_bin}",
                               d_pair=['Ilvq_mean'])
 
             rate = vsdm.RateCalc(vdf, form_factor_list[i_bin], mcalI,
                                  use_gvar=False, sparse=False)
 
-            rate_r += rate.mu_R(wG)
+            rate_r += rate.mu_R(wG, use_vecK=False)
 
             del mcalI, rate
 
@@ -97,6 +97,6 @@ for i_mass, mass in enumerate(mass_list):
         for i_rot in range(len(rotationlist)):
             reach = events_per_year / const.KG_YR / \
                 rate_r[i_rot] * const.inveV_to_cm**2
-            print(f"Mass {mass/10**6} MeV, fn {fn}, rotation {i_rot}:")
+            print(f"Mass {mass/10**6} MeV, fn {fdm}, rotation {i_rot}:")
             print(
                 f"    Projected reach for {events_per_year} events per year: {reach} cm^2")
