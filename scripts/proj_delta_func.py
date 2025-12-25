@@ -1,42 +1,40 @@
 from vectorphonodark import constants as const
-from vectorphonodark import projection
+from vectorphonodark.rate import BinnedMcalI
 
-
-"""Inputs start here"""
 input_path = '/Users/jukcoeng/Desktop/Dark_Matter/Vector Space Integration/VectorPhonoDark/'
-output_path = '/Users/jukcoeng/Desktop/Dark_Matter/Vector Space Integration/VectorPhonoDark/'
+output_path = '/Users/jukcoeng/Desktop/Dark_Matter/Vector Space Integration/VectorPhonoDark/output/'
 
-mass_list = [10**8]
-fdm_list = [2]
-
-l_list = list(range(6))
-nv_list = list(range(32))
-nq_list = list(range(2**7)) + [2**p for p in range(7, 20)]
-
-v_max = (const.VESC + const.VE) * 1.0
-q_max = [2*mass*(const.VESC + const.VE) for mass in mass_list]
+mass = 10**6
+q_max = 2*mass*(const.VESC + const.VE)
 
 physics_params = {
-    'v_max': v_max,
-    'q_max': q_max,
-    'threshold': 1e-3,           # eV
-    'mass_list': mass_list,
-    'fdm_list': fdm_list,
+    'fdm': 0,
+    'energy_threshold': 1e-3, # eV
+    'energy_bin_width': 1e-3, # eV
+    'mass_dm': mass,
     'mass_sm': const.M_NUCL
 }
 numerics_params = {
-    'l_list': l_list,
-    'nv_list': nv_list,
-    'nq_list': nq_list,
-    'energy_bin_width': 1e-3,   # eV
-    'energy_max': 36e-3, # 0.10723,      # eV, maximal energy for all materials considered
+    'n_bins': 108,
+    'l_max': 5,
+    'nv_list': list(range(2**5)),
+    'nq_list': list(range(2**7)), # + [2**p for p in range(7, 20)]
+    'v_max': (const.VESC + const.VE) * 1.0,
+    'q_max': q_max
 }
 file_params = {
-    'hdf5name': output_path+'output/test'
+    'hdf5': output_path+'test',
+    'hdf5_group': 'mcalI/1MeV/(0,0)/6_32_128',
+    'hdf5_data': 'data'
 }
-"""Inputs end here"""
+params = {
+    **physics_params,
+    **numerics_params
+}
 
-projection.proj_mcalI(physics_params=physics_params, 
-                      numerics_params=numerics_params, 
-                      file_params=file_params, 
-                      verbose=True)
+binned_mcalI = BinnedMcalI(physics_params=physics_params,
+                         numerics_params=numerics_params)
+binned_mcalI.project(params=params, verbose=True)
+binned_mcalI.export_hdf5(filename=file_params['hdf5'],
+                         groupname=file_params['hdf5_group'],
+                         dataname=file_params['hdf5_data'])

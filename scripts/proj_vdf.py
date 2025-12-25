@@ -3,12 +3,8 @@ import numba
 from scipy import special
 
 from vectorphonodark import constants as const
+from vectorphonodark.rate import VDF
 from vectorphonodark import physics
-from vectorphonodark import projection
-
-
-"""Inputs start here"""
-output_path = '/Users/jukcoeng/Desktop/Dark_Matter/Vector Space Integration/VectorPhonoDark/'
 
 
 @numba.njit
@@ -35,35 +31,42 @@ n0_factor = np.pi**(3/2) * v_0**2 * (
     - 2 * v_esc / np.sqrt(np.pi) * np.exp(-v_esc**2 / v_0**2)
 )
 
-l_list = list(range(0, 9))
-n_list = list(range(2**7))
-
-v_max = (const.VESC + const.VE) * 1.
+output_path = '/Users/jukcoeng/Desktop/Dark_Matter/Vector Space Integration/VectorPhonoDark/output/'
 
 physics_params = {
-    'v_max': v_max,             # maximal velocity in eV
     'vdf': vdf_shm,
-    'vdf_params': (v_0, v_e, v_esc, n0_factor)
+    'vdf_params': (v_0, v_e, v_esc, n0_factor),
+    'vdf_params': {
+        'v_0': v_0,
+        'v_e': v_e,
+        'v_esc': v_esc,
+        'n0_factor': n0_factor
+    },
+    'model': 'SHM'
 }
 numerics_params = {
-    'l_list':               l_list,
-    'n_list':               n_list,
-    'n_a':                  128,         # number of r grid points
-    'n_b':                  180,         # number of theta grid points
-    'n_c':                  180,         # number of phi grid points
-    'power_a':              1,           # power for r grid spacing
-    # 'power_b':            1,           # power for theta grid spacing
-    # 'power_c':            1,           # power for phi grid spacing
-    # 'basis':                'haar',    # basis type
+    # reference velocity scale
+    'v_max': (const.VESC + const.VE) * 1.0,
+    'l_max': 5,
+    'n_list': list(range(2**7)),
+    'n_grid': (128, 180, 180),
+    # 'basis': 'haar',
 }
 file_params = {
-    'vdf_model': 'shm',
-    'csvname': output_path+'output/vdf/shm_230_240_600_128_180_180_new'
+    'csv': output_path+'vdf/shm_230_240_600_128_180_180_1'+'.csv',
+    'hdf5': output_path+'test'+'.hdf5',
+    'hdf5_group': 'vdf/shm_230_240_600_128_180_180',
+    'hdf5_data': 'data'
 }
-"""Inputs end here"""
+params = {
+    **physics_params,
+    **numerics_params
+}
 
-
-projection.proj_vdf(physics_params=physics_params,
-                    numerics_params=numerics_params,
-                    file_params=file_params,
-                    verbose=True)
+vdf = VDF(physics_params=physics_params,
+          numerics_params=numerics_params)
+vdf.project(params=params, verbose=True)
+vdf.export_csv(filename=file_params['csv'])
+vdf.export_hdf5(filename=file_params['hdf5'],
+                groupname=file_params['hdf5_group'],
+                dataname=file_params['hdf5_data'])

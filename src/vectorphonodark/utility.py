@@ -11,6 +11,12 @@ from . import constants as const
 from . import phonopy_funcs
 
 
+class Color:
+    GREEN = "\033[92m"
+    CYAN = "\033[96m"
+    RESET = "\033[0m"
+
+
 def import_file(full_name, path):
     """
     Import a module from a given file path.
