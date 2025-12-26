@@ -2,6 +2,7 @@ import numpy as np
 import math
 import numba
 import os
+import sys
 import csv
 import h5py
 import quaternionic
@@ -11,10 +12,15 @@ from . import constants as const
 from . import phonopy_funcs
 
 
-class Color:
-    GREEN = "\033[92m"
-    CYAN = "\033[96m"
-    RESET = "\033[0m"
+# Define color codes for terminal output
+if sys.stdout.isatty():
+    C_GREEN = "\033[92m"
+    C_CYAN = "\033[96m"
+    C_RESET = "\033[0m"
+else:
+    C_GREEN = ""
+    C_CYAN = ""
+    C_RESET = ""
 
 
 def import_file(full_name, path):

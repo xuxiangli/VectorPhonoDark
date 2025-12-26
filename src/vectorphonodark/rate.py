@@ -12,7 +12,7 @@ import vsdm
 from . import constants as const
 from . import basis_funcs
 from . import projection as proj
-from .utility import Color
+from .utility import C_GREEN, C_CYAN, C_RESET
 from . import phonopy_funcs
 from . import physics
 
@@ -83,7 +83,7 @@ class Fnlm:
                         writer.writerow(row)
         
         if verbose:
-            print(f"    Fnlm data written to {Color.GREEN}{filename}{Color.RESET}.")
+            print(f"    Fnlm data written to {C_GREEN}{filename}{C_RESET}.")
 
     def import_csv(self, filename, verbose=True):
         if not filename.endswith('.csv'):
@@ -132,7 +132,7 @@ class Fnlm:
                 self.f_lm_n[idx_lm, idx_n] = value
 
         if verbose:
-            print(f"    Fnlm data read from {Color.GREEN}{filename}{Color.RESET}.")
+            print(f"    Fnlm data read from {C_GREEN}{filename}{C_RESET}.")
 
 
     def export_hdf5(self, filename, groupname, dataname='data', 
@@ -152,8 +152,8 @@ class Fnlm:
                     dset.attrs[key] = value
         if verbose:
             print(
-                f"    Fnlm data written to {Color.GREEN}{filename}{Color.RESET}",
-                f"in group {Color.CYAN}{groupname}/{dataname}{Color.RESET}."
+                f"    Fnlm data written to {C_GREEN}{filename}{C_RESET}",
+                f"in group {C_CYAN}{groupname}/{dataname}{C_RESET}."
             )
 
     def import_hdf5(self, filename, groupname, dataname='data', verbose=True):
@@ -171,8 +171,8 @@ class Fnlm:
             
         if verbose:
             print(
-                f"    Fnlm data read from {Color.GREEN}{filename}{Color.RESET}",
-                f"    in group {Color.CYAN}{groupname}/{dataname}{Color.RESET}."
+                f"    Fnlm data read from {C_GREEN}{filename}{C_RESET}",
+                f"in group {C_CYAN}{groupname}/{dataname}{C_RESET}."
             )
 
 
@@ -193,7 +193,7 @@ class BinnedFnlm:
             self.fnlms[idx_bin].export_csv(bin_filename, write_info=write_info, 
                                            verbose=False)
         if verbose:
-            print(f"    BinnedFnlm data written to {Color.GREEN}{filename}_bin_*.csv{Color.RESET} files.")
+            print(f"    BinnedFnlm data written to {C_GREEN}{filename}_bin_*.csv{C_RESET} files.")
     
     def import_csv(self, filename, verbose=True):
         if filename.endswith('.csv'):
@@ -234,7 +234,7 @@ class BinnedFnlm:
             self.l_mod = l_mod_list[0]
 
         if verbose:
-            print(f"    BinnedFnlm data read from {Color.GREEN}{filename}_bin_*.csv{Color.RESET} files.") 
+            print(f"    BinnedFnlm data read from {C_GREEN}{filename}_bin_*.csv{C_RESET} files.") 
 
     def export_hdf5(self, filename, groupname, dataname='data', 
                    write_info=True, verbose=True):
@@ -254,8 +254,8 @@ class BinnedFnlm:
         
         if verbose:
             print(
-                f"    BinnedFnlm data written to {Color.GREEN}{filename}{Color.RESET}",
-                f"    in group {Color.CYAN}{groupname}/bin_*{Color.RESET}."
+                f"    BinnedFnlm data written to {C_GREEN}{filename}{C_RESET}",
+                f"in group {C_CYAN}{groupname}/bin_*{C_RESET}."
             )
 
     def import_hdf5(self, filename, groupname, dataname='data', verbose=True):
@@ -277,8 +277,8 @@ class BinnedFnlm:
 
         if verbose:
             print(
-                f"    BinnedFnlm data read from {Color.GREEN}{filename}{Color.RESET}",
-                 f"    in group {Color.CYAN}{groupname}/bin_*{Color.RESET}."
+                f"    BinnedFnlm data read from {C_GREEN}{filename}{C_RESET}",
+                 f"in group {C_CYAN}{groupname}/bin_*{C_RESET}."
             )
 
 
@@ -707,8 +707,8 @@ class McalI:
         
         if verbose:
             print(
-                f"    McalI data written to {Color.GREEN}{filename}{Color.RESET}",
-                f"    in group {Color.CYAN}{groupname}/{dataname}{Color.RESET}."
+                f"    McalI data written to {C_GREEN}{filename}{C_RESET}",
+                f"in group {C_CYAN}{groupname}/{dataname}{C_RESET}."
             )
 
     def import_hdf5(self, filename, groupname, dataname='data', verbose=True):
@@ -731,8 +731,8 @@ class McalI:
             
         if verbose:
             print(
-                f"    McalI data read from {Color.GREEN}{filename}{Color.RESET}",
-                f"    in group {Color.CYAN}{groupname}/{dataname}{Color.RESET}."
+                f"    McalI data read from {C_GREEN}{filename}{C_RESET}",
+                f"in group {C_CYAN}{groupname}/{dataname}{C_RESET}."
             )
 
     def project(self, params, verbose=False):
@@ -832,8 +832,8 @@ class BinnedMcalI:
         
         if verbose:
             print(
-                f"    BinnedMcalI data written to {Color.GREEN}{filename}{Color.RESET}",
-                f"    in group {Color.CYAN}{groupname}/bin_*{Color.RESET}."
+                f"    BinnedMcalI data written to {C_GREEN}{filename}{C_RESET}",
+                f"in group {C_CYAN}{groupname}/bin_*{C_RESET}."
             )
 
     def import_hdf5(self, filename, groupname, dataname='data', verbose=True):
@@ -875,8 +875,8 @@ class BinnedMcalI:
         
         if verbose:
             print(
-                f"    BinnedMcalI data read from {Color.GREEN}{filename}{Color.RESET}",
-                f"    in group {Color.CYAN}{groupname}/bin_*{Color.RESET}."
+                f"    BinnedMcalI data read from {C_GREEN}{filename}{C_RESET}",
+                f"in group {C_CYAN}{groupname}/bin_*{C_RESET}."
             )
 
     def project(self, params, verbose=False):
