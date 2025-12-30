@@ -7,6 +7,7 @@ import csv
 import h5py
 import quaternionic
 from importlib import util
+from functools import reduce
 
 from . import constants as const
 from . import phonopy_funcs
@@ -28,7 +29,7 @@ def import_file(full_name, path):
     Import a module from a given file path.
 
     Args:
-        full_name: 
+        full_name:
             str: The full name to assign to the module.
         path:
             str: The file path to the module.
@@ -49,25 +50,23 @@ def writeFnlm_csv(csvsave_name, f_nlm_coeffs={}, info={}, use_gvar=False) -> Non
     Write function coefficients to a CSV file.
 
     Args:
-        csvsave_name: 
+        csvsave_name:
             str: The path to the CSV file where coefficients will be saved.
-        f_nlm_coeffs: 
+        f_nlm_coeffs:
             dict: A dictionary where keys are (n, l, m) tuples and values are function coefficients.
-        basis: 
+        basis:
             dict: A dictionary of basis parameters to include in the CSV header.
-        use_gvar: 
+        use_gvar:
             bool: Whether the function coefficients are gvar objects (default is False).
     """
 
     makeHeader = not os.path.exists(csvsave_name)
-    with open(csvsave_name, 'a') as csvfile:
-        writer = csv.writer(csvfile, delimiter=',',
-                            quoting=csv.QUOTE_MINIMAL)
+    with open(csvsave_name, "a") as csvfile:
+        writer = csv.writer(csvfile, delimiter=",", quoting=csv.QUOTE_MINIMAL)
         if makeHeader:
-            bparams = [r'#'] + [str(lbl) + ': ' + str(prm)
-                                for lbl, prm in info.items()]
+            bparams = [r"#"] + [str(lbl) + ": " + str(prm) for lbl, prm in info.items()]
             writer.writerow(bparams)
-            header = [r'#n', 'l', 'm', 'f.mean', 'f.sdev']
+            header = [r"#n", "l", "m", "f.mean", "f.sdev"]
             writer.writerow(header)
         for nlm in f_nlm_coeffs.keys():
             f = f_nlm_coeffs[nlm]
@@ -79,24 +78,24 @@ def writeFnlm_csv(csvsave_name, f_nlm_coeffs={}, info={}, use_gvar=False) -> Non
             writer.writerow(newline)
 
 
-def write_hdf5(hdf5file, groupname, datasetname='data', data=None, info={}) -> None:
+def write_hdf5(hdf5file, groupname, datasetname="data", data=None, info={}) -> None:
     """
     Write data to an HDF5 file.
 
     Args:
-        hdf5file: 
+        hdf5file:
             str: The path to the HDF5 file.
-        groupname: 
+        groupname:
             str: The name of the group in the HDF5 file.
-        datasetname: 
+        datasetname:
             str: The name of the dataset within the group.
-        data: 
+        data:
             any: The data to be written to the dataset.
         info:
             dict: A dictionary of index names and their corresponding data to be written as separate datasets.
     """
 
-    with h5py.File(hdf5file, 'a') as h5f:
+    with h5py.File(hdf5file, "a") as h5f:
         if groupname not in h5f:
             grp = h5f.create_group(groupname)
         else:
@@ -114,13 +113,14 @@ def write_hdf5(hdf5file, groupname, datasetname='data', data=None, info={}) -> N
 
             grp.create_dataset(info_name, data=info_data)
 
+
 @numba.njit
 def sph_to_cart(vec_sph) -> np.ndarray:
     """
     Convert spherical coordinates to Cartesian coordinates.
 
     Args:
-        vec_sph: 
+        vec_sph:
             np.ndarray: An array of shape (..., 3) representing points in spherical coordinates (r, theta, phi).
 
     Returns:
@@ -137,13 +137,45 @@ def sph_to_cart(vec_sph) -> np.ndarray:
     return np.stack((x, y, z), axis=-1)
 
 
+def get_intersection_index(base=None, **lists):
+    """
+    Get the indices of common elements in multiple lists.
+
+    Args:
+        base_list (list): The base list to compare against.
+        **lists: Arbitrary number of lists to find common elements with.
+
+    Returns:
+        np.ndarray: Array of indices in each list corresponding to the common elements.
+            shape: (number of lists, number of common elements)
+    """
+    arrays = [np.asarray(l) for l in lists.values()]
+    base_arr = np.asarray(base) if base is not None else np.array([])
+    if base_arr.size > 0:
+        arrays.insert(0, base_arr)
+
+    if not arrays:
+        return np.array([])
+
+    common_elements = reduce(np.intersect1d, arrays)
+
+    if common_elements.size == 0:
+        return np.empty((len(lists), 0), dtype=int)
+
+    target_arrays = [np.asarray(l) for l in lists.values()]
+    indices = np.vstack(
+        [np.searchsorted(arr, common_elements) for arr in target_arrays]
+    )
+    return indices
+
+
 def getQ(theta, phi):
-    axisphi = phi + np.pi/2  # stationary under R
-    axR = theta/2
+    axisphi = phi + np.pi / 2  # stationary under R
+    axR = theta / 2
     qr = np.cos(axR)
     qi = np.sin(axR) * np.cos(axisphi)
     qj = np.sin(axR) * np.sin(axisphi)
-    qk = 0.
+    qk = 0.0
     return quaternionic.array(qr, qi, qj, qk)
 
 
@@ -152,9 +184,9 @@ def run_phonopy(phonon_file, k_red) -> list[np.ndarray]:
     Run phonopy to compute phonon eigenvectors and frequencies at given k-points.
 
     Args:
-        phonon_file: 
+        phonon_file:
             Phonopy object: The phonopy object containing the phonon data.
-        k_red: 
+        k_red:
             np.ndarray: An array of shape (N, 3) representing the reduced k-points.
 
     Returns:
@@ -168,21 +200,22 @@ def run_phonopy(phonon_file, k_red) -> list[np.ndarray]:
 
     mesh_dict = phonon_file.get_qpoints_dict()
 
-    eigenvectors_pre = mesh_dict['eigenvectors']
+    eigenvectors_pre = mesh_dict["eigenvectors"]
 
     # convert frequencies to correct units
-    omega = 2*const.PI*(const.THz_To_eV)*mesh_dict['frequencies'][0]
+    omega = 2 * const.PI * (const.THz_To_eV) * mesh_dict["frequencies"][0]
 
     num_atoms = phonon_file.primitive.get_number_of_atoms()
-    num_modes = 3*num_atoms
+    num_modes = 3 * num_atoms
 
     # q, nu, i, alpha
     eigenvectors = np.zeros((num_modes, num_atoms, 3), dtype=complex)
 
     # sort the eigenvectors
     for nu in range(num_modes):
-        eigenvectors[nu][:][:] = np.array(np.array_split(
-            eigenvectors_pre.T[nu], num_atoms)).reshape(num_atoms, 3)
+        eigenvectors[nu][:][:] = np.array(
+            np.array_split(eigenvectors_pre.T[nu], num_atoms)
+        ).reshape(num_atoms, 3)
 
     return [eigenvectors, omega]
 
@@ -190,10 +223,10 @@ def run_phonopy(phonon_file, k_red) -> list[np.ndarray]:
 @numba.njit
 def get_kG_from_q_red(q_red_vec, q_red_to_XYZ):
     """
-        q_red_vec: q vector in reduced coordinates
-        q_red_to_XYZ: matrix converting q in reduced coordinates to XYZ
+    q_red_vec: q vector in reduced coordinates
+    q_red_to_XYZ: matrix converting q in reduced coordinates to XYZ
 
-        output: [k_red_vec, G_red_vec]: the k and G vectors in reduced coordinates 
+    output: [k_red_vec, G_red_vec]: the k and G vectors in reduced coordinates
 
     """
     set_of_closest_G_red = np.zeros((8, 3), dtype=np.float64)
@@ -201,52 +234,55 @@ def get_kG_from_q_red(q_red_vec, q_red_to_XYZ):
     set_of_closest_G_red[0] = [
         math.floor(q_red_vec[0]),
         math.floor(q_red_vec[1]),
-        math.floor(q_red_vec[2])
+        math.floor(q_red_vec[2]),
     ]
     set_of_closest_G_red[1] = [
         math.floor(q_red_vec[0]),
         math.floor(q_red_vec[1]),
-        math.ceil(q_red_vec[2])
+        math.ceil(q_red_vec[2]),
     ]
     set_of_closest_G_red[2] = [
         math.floor(q_red_vec[0]),
         math.ceil(q_red_vec[1]),
-        math.floor(q_red_vec[2])
+        math.floor(q_red_vec[2]),
     ]
     set_of_closest_G_red[3] = [
         math.ceil(q_red_vec[0]),
         math.floor(q_red_vec[1]),
-        math.floor(q_red_vec[2])
+        math.floor(q_red_vec[2]),
     ]
     set_of_closest_G_red[4] = [
         math.floor(q_red_vec[0]),
         math.ceil(q_red_vec[1]),
-        math.ceil(q_red_vec[2])
+        math.ceil(q_red_vec[2]),
     ]
     set_of_closest_G_red[5] = [
         math.ceil(q_red_vec[0]),
         math.floor(q_red_vec[1]),
-        math.ceil(q_red_vec[2])
+        math.ceil(q_red_vec[2]),
     ]
     set_of_closest_G_red[6] = [
         math.ceil(q_red_vec[0]),
         math.ceil(q_red_vec[1]),
-        math.floor(q_red_vec[2])
+        math.floor(q_red_vec[2]),
     ]
     set_of_closest_G_red[7] = [
         math.ceil(q_red_vec[0]),
         math.ceil(q_red_vec[1]),
-        math.ceil(q_red_vec[2])
+        math.ceil(q_red_vec[2]),
     ]
 
     # q_XYZ_vec = q_red_to_XYZ @ q_red_vec
     q_XYZ_vec = [
-        q_red_to_XYZ[0, 0]*q_red_vec[0] + q_red_to_XYZ[0, 1]*q_red_vec[1]
-        + q_red_to_XYZ[0, 2]*q_red_vec[2],
-        q_red_to_XYZ[1, 0]*q_red_vec[0] + q_red_to_XYZ[1, 1]*q_red_vec[1]
-        + q_red_to_XYZ[1, 2]*q_red_vec[2],
-        q_red_to_XYZ[2, 0]*q_red_vec[0] + q_red_to_XYZ[2, 1]*q_red_vec[1]
-        + q_red_to_XYZ[2, 2]*q_red_vec[2]
+        q_red_to_XYZ[0, 0] * q_red_vec[0]
+        + q_red_to_XYZ[0, 1] * q_red_vec[1]
+        + q_red_to_XYZ[0, 2] * q_red_vec[2],
+        q_red_to_XYZ[1, 0] * q_red_vec[0]
+        + q_red_to_XYZ[1, 1] * q_red_vec[1]
+        + q_red_to_XYZ[1, 2] * q_red_vec[2],
+        q_red_to_XYZ[2, 0] * q_red_vec[0]
+        + q_red_to_XYZ[2, 1] * q_red_vec[1]
+        + q_red_to_XYZ[2, 2] * q_red_vec[2],
     ]
 
     first = True
@@ -255,26 +291,29 @@ def get_kG_from_q_red(q_red_vec, q_red_to_XYZ):
 
         # diff_vec = q_XYZ_vec - q_red_to_XYZ @ vec
         diff_vec = [
-            q_XYZ_vec[0] - (
-                q_red_to_XYZ[0, 0]*vec[0]
-                + q_red_to_XYZ[0, 1]*vec[1]
-                + q_red_to_XYZ[0, 2]*vec[2]
+            q_XYZ_vec[0]
+            - (
+                q_red_to_XYZ[0, 0] * vec[0]
+                + q_red_to_XYZ[0, 1] * vec[1]
+                + q_red_to_XYZ[0, 2] * vec[2]
             ),
-            q_XYZ_vec[1] - (
-                q_red_to_XYZ[1, 0]*vec[0]
-                + q_red_to_XYZ[1, 1]*vec[1]
-                + q_red_to_XYZ[1, 2]*vec[2]
+            q_XYZ_vec[1]
+            - (
+                q_red_to_XYZ[1, 0] * vec[0]
+                + q_red_to_XYZ[1, 1] * vec[1]
+                + q_red_to_XYZ[1, 2] * vec[2]
             ),
-            q_XYZ_vec[2] - (
-                q_red_to_XYZ[2, 0]*vec[0]
-                + q_red_to_XYZ[2, 1]*vec[1]
-                + q_red_to_XYZ[2, 2]*vec[2]
-            )
+            q_XYZ_vec[2]
+            - (
+                q_red_to_XYZ[2, 0] * vec[0]
+                + q_red_to_XYZ[2, 1] * vec[1]
+                + q_red_to_XYZ[2, 2] * vec[2]
+            ),
         ]
         diff_vec_sq = (
-            diff_vec[0]*diff_vec[0]
-            + diff_vec[1]*diff_vec[1]
-            + diff_vec[2]*diff_vec[2]
+            diff_vec[0] * diff_vec[0]
+            + diff_vec[1] * diff_vec[1]
+            + diff_vec[2] * diff_vec[2]
         )
 
         if first:
@@ -287,9 +326,11 @@ def get_kG_from_q_red(q_red_vec, q_red_to_XYZ):
     G_red_vec = min_vec
 
     # k_red_vec = np.array(q_red_vec) - np.array(G_red_vec)
-    k_red_vec = [q_red_vec[0] - G_red_vec[0],
-                 q_red_vec[1] - G_red_vec[1],
-                 q_red_vec[2] - G_red_vec[2]]
+    k_red_vec = [
+        q_red_vec[0] - G_red_vec[0],
+        q_red_vec[1] - G_red_vec[1],
+        q_red_vec[2] - G_red_vec[2],
+    ]
 
     return k_red_vec, G_red_vec
 
@@ -297,10 +338,10 @@ def get_kG_from_q_red(q_red_vec, q_red_to_XYZ):
 @numba.njit
 def get_kG_from_q_XYZ(q_XYZ_vec, q_red_to_XYZ) -> tuple[np.ndarray, np.ndarray]:
     """
-        q_XYZ_vec: q vector in XYZ coordinates
-        q_red_to_XYZ: matrix converting q in reduced coordinates to XYZ
+    q_XYZ_vec: q vector in XYZ coordinates
+    q_red_to_XYZ: matrix converting q in reduced coordinates to XYZ
 
-        output: [k_red_vec, G_red_vec]: the k and G vectors in reduced coordinates 
+    output: [k_red_vec, G_red_vec]: the k and G vectors in reduced coordinates
     """
 
     q_red_vec = np.dot(np.linalg.inv(q_red_to_XYZ), q_XYZ_vec)
@@ -356,9 +397,11 @@ def get_kG_from_q_XYZ(q_XYZ_vec, q_red_to_XYZ) -> tuple[np.ndarray, np.ndarray]:
 
 
 @numba.njit
-def get_kG_list_from_q_xyz_list(q_xyz_list, recip_red_to_XYZ) -> tuple[np.ndarray, np.ndarray]:
+def get_kG_list_from_q_xyz_list(
+    q_xyz_list, recip_red_to_XYZ
+) -> tuple[np.ndarray, np.ndarray]:
     """
-        Returns the k and G vectors in reduced coordinates given a q vector.
+    Returns the k and G vectors in reduced coordinates given a q vector.
     """
 
     n_q = len(q_xyz_list)
@@ -377,20 +420,20 @@ def get_kG_list_from_q_xyz_list(q_xyz_list, recip_red_to_XYZ) -> tuple[np.ndarra
     return k_mesh, G_xyz_list
 
 
-def get_G_eigenvectors_omega_from_q_xyz(q_xyz_list, phonon_file, phonopy_params) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+def get_G_eigenvectors_omega_from_q_xyz(
+    q_xyz_list, phonon_file, phonopy_params
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
-        Get q_xyz, G_xyz, eigenvectors, and omega from a q_sph mesh.
+    Get q_xyz, G_xyz, eigenvectors, and omega from a q_sph mesh.
     """
 
     # reciprocal matrix to convert q in reduced coordinates to XYZ
-    recip_red_to_XYZ = np.array(phonopy_params['recip_red_to_XYZ'])
+    recip_red_to_XYZ = np.array(phonopy_params["recip_red_to_XYZ"])
 
     # get corresponding vector k in the first Brillouin zone and G = q - k
-    k_red_list, G_xyz_list = get_kG_list_from_q_xyz_list(
-        q_xyz_list, recip_red_to_XYZ)
+    k_red_list, G_xyz_list = get_kG_list_from_q_xyz_list(q_xyz_list, recip_red_to_XYZ)
 
     # run phonopy to get polarization vectors and photon energies
-    [ph_eigenvectors, ph_omega] = phonopy_funcs.run_phonopy(
-        phonon_file, k_red_list)
+    [ph_eigenvectors, ph_omega] = phonopy_funcs.run_phonopy(phonon_file, k_red_list)
 
     return G_xyz_list, ph_eigenvectors, ph_omega
