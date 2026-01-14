@@ -6,13 +6,17 @@ input_path = (
 )
 output_path = "/Users/jukcoeng/Desktop/Dark_Matter/Vector Space Integration/VectorPhonoDark/output/"
 
-mass = 10**6
+mass = 10**7
 q_max = 2 * mass * (const.VESC + const.VE)
+energy_threshold = 1e-3  # eV
+q_min = energy_threshold / (const.VESC + const.VE)
+f_med = 2
 nv_list = list(range(2**7))
-nq_list = list(range(2**10)) + [2**p for p in range(10, 13)]
+nq_list = list(range(2**11))
 
 physics_params = {
-    "fdm": 2,
+    "fdm": (-2*f_med, 0),
+    # "q0_fdm": mass * const.V0,  # reference momentum transfer in eV
     "energy_threshold": 1e-3,  # eV
     "energy_bin_width": 1e-3,  # eV
     "mass_dm": mass,
@@ -25,10 +29,12 @@ numerics_params = {
     "nq_list": nq_list,
     "v_max": (const.VESC + const.VE) * 1.0,
     "q_max": q_max,
+    "log_wavelet_q": True,
+    "eps_q": q_min / q_max,
 }
 file_params = {
-    "hdf5": output_path + "test",
-    "hdf5_group": f"mcalI/{mass/10**6}MeV/({physics_params['fdm']},0)/new/",
+    "hdf5": output_path + "test_diff_grids_mcalI_2" + ".hdf5",
+    "hdf5_group": f"mcalI/{mass/10**6}MeV/{physics_params['fdm']}_log",
     "hdf5_data": "data",
 }
 params = {**physics_params, **numerics_params}

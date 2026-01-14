@@ -14,6 +14,7 @@ from . import utility
 from .utility import C_GREEN, C_CYAN, C_RESET
 from . import phonopy_funcs
 from . import physics
+from . import analytic
 
 
 @numba.njit
@@ -23,9 +24,7 @@ def generate_mesh_ylm_jacob(
     n_a: int,
     n_b: int,
     n_c: int,
-    power_a: float,
-    power_b: float = 1,
-    power_c: float = 1,
+    power_a: float = 1,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Generate mesh points, spherical harmonic values, and Jacobian values on the mesh.
@@ -43,10 +42,6 @@ def generate_mesh_ylm_jacob(
             int: Number of phi grid points.
         power_a:
             float: Power for radial grid spacing.
-        power_b:
-            float: Power for theta grid spacing.
-        power_c:
-            float: Power for phi grid spacing.
     Returns:
         u_xyz_list: An array of shape (n_a*n_b*n_c, 3) representing
                     Cartesian coordinates of the mesh points.
@@ -96,35 +91,39 @@ def generate_mesh_ylm_jacob(
     return u_xyz_list, y_lm_vals, jacob_vals
 
 
-@numba.njit(fastmath=True)
-def generate_special_mesh_jacob_nlist(
+@numba.njit
+def generate_log_mesh_ylm_jacob(
+    lm_list: list[tuple[int, int]],
     u_max: float,
-    u_min: float,
+    n_a: int,
     n_b: int,
     n_c: int,
-    lam_start: int = 0,
-    verbose: bool = False,
+    eps: float = 0.,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
-    Generate special mesh points, Jacobian values, and n_list for projection.
+    Generate log-spaced mesh points, spherical harmonic values, and Jacobian values on the mesh.
 
     Args:
+        lm_list:
+            list of tuples: List of (l, m) tuples.
         u_max:
             float: Maximum radial value.
-        u_min:
-            float: Minimum radial value.
         n_a:
             int: Number of radial grid points.
         n_b:
             int: Number of theta grid points.
         n_c:
             int: Number of phi grid points.
-        lam_start:
-            int: Starting index for exponential scaling.
+        eps:
+            float: Minimum radial value (u_max = 1.0).
     Returns:
-        u_xyz_list: An array of shape (n_a*n_b*n_c, 3) representing Cartesian coordinates of the special mesh points.
-        jacob_vals: An array of shape (n_a,) representing Jacobian values for integration on the special mesh.
-        n_list: An array of shape (n_a-1,) representing the n values for the wavelets.
+        u_xyz_list: An array of shape (n_a*n_b*n_c, 3) representing
+                    Cartesian coordinates of the mesh points.
+        y_lm_vals: A dictionary with keys as (l, m) tuples and values as
+                   arrays of shape (n_b, n_c) representing spherical
+                   harmonic values.
+        jacob_list: An array of shape (n_a,) representing Jacobian values
+                    for integration.
     """
 
     dcostheta = 2.0 / n_b
@@ -132,16 +131,22 @@ def generate_special_mesh_jacob_nlist(
     dphi = 2 * np.pi / n_c
     phi_list = np.linspace(dphi / 2, 2 * np.pi - dphi / 2, n_c)
 
-    lam_end = int(np.floor(np.log2(u_max / u_min)))
-    if lam_end <= lam_start:
-        if verbose:
-            print("    Special mesh: n_max large enough, no special mesh generated.")
-        return np.empty((0, 3)), np.empty((0,)), np.empty((0,), dtype=np.int64)
-    n_a = lam_end - lam_start + 1
+    y_lm_vals = {}
+    for l, m in lm_list:
+        y_lm_vals[(l, m)] = np.array(
+            [
+                vsdm.ylm_real(l, m, theta, phi)
+                for theta in theta_list
+                for phi in phi_list
+            ]
+        ).reshape(n_b, n_c)
 
-    r_list = np.power(2.0, -(lam_end + 1) + np.arange(n_a) + 0.5)
-    dr_list = r_list * np.log(2)
-    jacob_vals = r_list**2 * dr_list * dcostheta * dphi
+    da = 1.0 / n_a
+    a_list = np.linspace(da / 2, 1.0 - da / 2, n_a)
+
+    length = np.log(1. / eps)
+    r_list = eps * np.exp(a_list * length)
+    jacob_list = r_list**2 * (r_list * length * da) * dcostheta * dphi
 
     u_sph_list = np.array(
         [
@@ -153,17 +158,55 @@ def generate_special_mesh_jacob_nlist(
     ).reshape(n_a * n_b * n_c, 3)
     u_xyz_list = utility.sph_to_cart(u_sph_list)
 
-    # Only n_a-1 wavelets
-    n_list = np.power(2, np.arange(lam_start, lam_end))
-    if verbose:
-        print(
-            f"    Special mesh: Generated {len(n_list)} additional wavelets from n={n_list[0]} to n={n_list[-1]}."
-        )
-
-    return u_xyz_list, jacob_vals, n_list
+    return u_xyz_list, y_lm_vals, jacob_list
 
 
-@numba.njit(fastmath=True)
+@numba.njit
+def proj_get_wavelet_boundary(n, n_a, power_a=1) -> tuple[int, int, int]:
+    """
+    Get the boundary indices for integration based on wavelet order n.
+    """
+
+    if n == 0:
+        r_min_idx = 0.
+        r_mid_idx = n_a
+        r_max_idx = n_a
+    else:
+        x_min, x_mid, x_max = basis_funcs.haar_support(n)
+        # Linear or power-law grid
+        if power_a == 1:
+            r_min_idx = int(x_min * n_a)
+            r_mid_idx = int(x_mid * n_a)
+            r_max_idx = int(x_max * n_a)
+        else:
+            r_min_idx = int(np.power(x_min, 1.0 / power_a) * n_a)
+            r_mid_idx = int(np.power(x_mid, 1.0 / power_a) * n_a)
+            r_max_idx = int(np.power(x_max, 1.0 / power_a) * n_a)
+
+    return r_min_idx, r_mid_idx, r_max_idx
+
+
+@numba.njit
+def proj_get_wavelet_boundary_log(n, n_a, eps) -> tuple[int, int, int]:
+    """
+    Get the boundary indices for integration based on log wavelet order n.
+    """
+
+    if n == 0:
+        r_min_idx = 0.
+        r_mid_idx = n_a
+        r_max_idx = n_a
+    else:
+        x_min, x_mid, x_max = basis_funcs.haar_support_log(n, eps)
+        length = np.log(1.0 / eps)
+        r_min_idx = int(np.log(x_min / eps) / (length / n_a))
+        r_mid_idx = int(np.log(x_mid / eps) / (length / n_a))
+        r_max_idx = int(np.log(x_max / eps) / (length / n_a))
+
+    return r_min_idx, r_mid_idx, r_max_idx
+
+
+@numba.njit
 def proj_integrate_3d(
     func_vals: np.ndarray,
     haar_vals: float,
@@ -197,25 +240,25 @@ def proj_integrate_3d(
     return total * haar_vals
 
 
-@numba.njit(fastmath=True)
+@numba.njit
 def proj_get_f_nlm(
     n_list: np.ndarray,
     lm_list: list[tuple[int, int]],
     func_vals: np.ndarray,
     y_lm_vals: dict[tuple[int, int], np.ndarray],
     jacob_vals: np.ndarray,
-    basis: str,
     n_a: int,
-    power_a: float,
-    special_mesh: bool = False,
+    power_a: float = 1,
+    log_wavelet: bool = False,
+    eps: float = 1.,
     verbose: bool = False,
 ) -> dict[tuple[int, int, int], float]:
     """
     Project function values onto basis functions to obtain f_nlm coefficients.
 
     Args:
-        n_max:
-            int: Maximum radial quantum number.
+        n_list:
+            np.ndarray: List of radial quantum numbers.
         lm_list:
             list[tuple[int, int]]: List of (l, m) tuples representing angular quantum numbers.
         func_vals:
@@ -224,14 +267,10 @@ def proj_get_f_nlm(
             dict[tuple[int, int], np.ndarray]: The spherical harmonic values on the grid.
         jacob_vals:
             np.ndarray: The Jacobian values on the grid.
-        basis:
-            str: The type of basis functions to use.
         n_a:
             int: Number of radial points.
         power_a:
             float: Power parameter for radial scaling.
-        special_mesh:
-            bool: Whether a special mesh is used.
         verbose:
             bool: Whether to print verbose output.
 
@@ -241,28 +280,21 @@ def proj_get_f_nlm(
 
     f_nlm = {}
 
-    for i_n, n in enumerate(n_list):
+    for n in n_list:
 
-        if basis == "haar":
-            support = basis_funcs.haar_support(n)
+        # Get wavelet values and boundaries
+        if log_wavelet:
+            value = basis_funcs.haar_value_log(n, eps=eps, p=2)
+            r_min_idx, r_mid_idx, r_max_idx = proj_get_wavelet_boundary_log(
+                n, n_a, eps=eps
+            )   
+        else:
             value = basis_funcs.haar_value(n, dim=3)
-        else:
-            raise NotImplementedError("Projection: Unsupported basis type.")
+            r_min_idx, r_mid_idx, r_max_idx = proj_get_wavelet_boundary(
+                n, n_a, power_a=power_a
+            )
 
-        if special_mesh:
-            r_min_idx = 0
-            r_mid_idx = n_a - i_n - 1
-            r_max_idx = n_a - i_n
-        else:
-            if power_a == 1:
-                r_min_idx = int(support[0] * n_a)
-                r_mid_idx = int(support[1] * n_a)
-                r_max_idx = int(support[-1] * n_a)
-            else:
-                r_min_idx = int(np.power(support[0], 1.0 / power_a) * n_a)
-                r_mid_idx = int(np.power(support[1], 1.0 / power_a) * n_a)
-                r_max_idx = int(np.power(support[-1], 1.0 / power_a) * n_a)
-
+        # Perform integration
         if n == 0:
             for l, m in lm_list:
                 f_nlm[(n, l, m)] = proj_integrate_3d(
@@ -287,433 +319,6 @@ def proj_get_f_nlm(
                 )
 
     return f_nlm
-
-
-def proj_form_factor(
-    physics_params,
-    numerics_params,
-    phonopy_params,
-    file_params,
-    phonon_file,
-    c_dict,
-    verbose=False,
-) -> None:
-
-    if verbose:
-        print("\n    Starting projection of form factor onto basis functions...")
-        start_total_time = time.time()
-
-    l_list = numerics_params["l_list"]
-    n_list = numerics_params["n_list"]
-
-    # Extract parameters
-    basis = numerics_params.get("basis", "haar")
-    n_a = numerics_params["n_a"]
-    n_b = numerics_params["n_b"]
-    n_c = numerics_params["n_c"]
-    power_a = numerics_params.get("power_a", 1)
-    power_b = numerics_params.get("power_b", 1)
-    power_c = numerics_params.get("power_c", 1)
-    special_mesh = numerics_params.get("special_mesh", False)
-
-    assert basis in ["haar"], "Projection: Unsupported basis type."
-    assert (
-        power_b == 1
-    ), "Projection: Only power_theta=1 is supported for spherical Haar wavelets."
-    assert (
-        power_c == 1
-    ), "Projection: Only power_phi=1 is supported for spherical Haar wavelets."
-
-    energy_threshold = physics_params["threshold"]
-    energy_bin_width = numerics_params["energy_bin_width"]
-    energy_max_factor = numerics_params.get("energy_max_factor", 4.0)
-    energy_max = physics.get_energy_max(phonon_file, factor=energy_max_factor)
-    energy_bin_num = int((energy_max - energy_threshold) / energy_bin_width) + 1
-
-    q_max = physics_params["q_max"]
-    q_cut_option = numerics_params["q_cut"]
-    q_max = physics.get_q_max(
-        q_max=q_max,
-        q_cut_option=q_cut_option,
-        phonon_file=phonon_file,
-        atom_masses=phonopy_params["atom_masses"],
-        verbose=verbose,
-    )
-
-    modelname = file_params["modelname"]
-    csvname = file_params["csvname"]
-    write_info = {
-        "basis": basis,
-        "threshold": energy_threshold,
-        "energy_bin_width": energy_bin_width,
-        "q_max": q_max,
-        "n_a": n_a,
-        "n_b": n_b,
-        "n_c": n_c,
-        "power_a": power_a,
-        "power_b": power_b,
-        "power_c": power_c,
-        "special_mesh": special_mesh,
-    }
-
-    if verbose:
-        print(f"    Using {basis} basis with n_max={max(n_list)}, l_max={max(l_list)}")
-        print(f"    Grid size: n_a={n_a}, n_b={n_b}, n_c={n_c}")
-        print(
-            f"    Grid rescaled: power_a={power_a}, power_b={power_b}, power_c={power_c}"
-        )
-        print(
-            f"    Energy bins: {energy_bin_num} bins from {energy_threshold} eV to {energy_max} eV"
-        )
-
-        print("\n    Generate grids and calculating form factor...")
-        start_time = time.time()
-
-    # Prepare grid points and basis function values
-    lm_list = [(l, m) for l in l_list for m in range(-l, l + 1)]
-    q_xyz_list, y_lm_vals, jacob_vals = generate_mesh_ylm_jacob(
-        lm_list, q_max, n_a, n_b, n_c, power_a, power_b, power_c
-    )
-    if special_mesh:
-        q_min = energy_threshold / (const.VESC + const.VE)
-        lam_start = basis_funcs.haar_n_to_lam_mu(max(n_list))[0] + 1
-        q_xyz_list_exp, jacob_vals_exp, n_list_exp = generate_special_mesh_jacob_nlist(
-            q_max, q_min, n_b, n_c, lam_start, verbose=verbose
-        )
-
-    # Calculate form factor on grid
-    form_factor_bin_vals = physics.form_factor(
-        q_xyz_list,
-        energy_threshold,
-        energy_bin_width,
-        energy_max,
-        numerics_params,
-        phonopy_params,
-        c_dict,
-        phonon_file,
-    ).reshape(energy_bin_num, n_a, n_b, n_c)
-    del q_xyz_list
-    if special_mesh:
-        form_factor_bin_vals_exp = physics.form_factor(
-            q_xyz_list_exp,
-            energy_threshold,
-            energy_bin_width,
-            energy_max,
-            numerics_params,
-            phonopy_params,
-            c_dict,
-            phonon_file,
-        ).reshape(energy_bin_num, -1, n_b, n_c)
-        del q_xyz_list_exp
-
-    if verbose:
-        end_time = time.time()
-        print(
-            f"    Form factor calculation completed in {end_time - start_time:.2f} seconds."
-        )
-        print("\n    Projecting form factor onto basis functions and saving results...")
-
-    # Project form factor onto basis functions
-    for i_bin in range(energy_bin_num):
-
-        if verbose:
-            if i_bin % (energy_bin_num // 5 + 1) == 0:
-                print(f"      Projecting energy bin {i_bin}/{energy_bin_num-1}...")
-
-        f_nlm = proj_get_f_nlm(
-            n_list,
-            lm_list,
-            form_factor_bin_vals[i_bin, :, :, :],
-            y_lm_vals,
-            jacob_vals,
-            basis,
-            n_a,
-            power_a,
-            verbose=verbose,
-        )
-        utility.writeFnlm_csv(
-            csvsave_name=csvname + "_bin_" + str(i_bin) + ".csv",
-            f_nlm_coeffs=f_nlm,
-            info=write_info,
-            use_gvar=False,
-        )
-
-        if special_mesh:
-            f_nlm_exp = proj_get_f_nlm(
-                n_list_exp,
-                lm_list,
-                form_factor_bin_vals_exp[i_bin, :, :, :],
-                y_lm_vals,
-                jacob_vals_exp,
-                basis,
-                len(n_list_exp),
-                power_a,
-                special_mesh=True,
-                verbose=verbose,
-            )
-            utility.writeFnlm_csv(
-                csvsave_name=csvname + "_bin_" + str(i_bin) + ".csv",
-                f_nlm_coeffs=f_nlm_exp,
-                use_gvar=False,
-            )
-
-    if verbose:
-        print("    Projection completed for all energy bins.")
-        print(f"\n    Coefficients saved to {csvname}_bin_*.csv")
-        end_total_time = time.time()
-        print(
-            f"    Total projection time: {end_total_time - start_total_time:.2f} seconds."
-        )
-
-
-def proj_vdf(physics_params, numerics_params, file_params, verbose=False) -> None:
-    """
-    Project the velocity distribution function onto basis functions.
-
-    Args:
-        n_max:
-            int: Maximum radial quantum number.
-        l_max:
-            int: Maximum angular quantum number.
-        vdf:
-            function: The velocity distribution function to be projected.
-        physics_params:
-            dict: Dictionary of physics parameters.
-        numerics_params:
-            dict: Dictionary of numerical parameters.
-        file_params:
-            dict: Dictionary of file parameters.
-        verbose:
-            bool: Whether to print verbose output.
-
-    Returns:
-        None
-    """
-
-    if verbose:
-        print(
-            "\n    Starting projection of velocity distribution function onto basis functions..."
-        )
-        start_total_time = time.time()
-
-    l_list = numerics_params["l_list"]
-    n_list = numerics_params["n_list"]
-
-    basis = numerics_params.get("basis", "haar")
-    n_a = numerics_params["n_a"]
-    n_b = numerics_params["n_b"]
-    n_c = numerics_params["n_c"]
-    power_a = numerics_params["power_a"]
-    power_b = numerics_params.get("power_b", 1)
-    power_c = numerics_params.get("power_c", 1)
-
-    assert basis in ["haar"], "Projection: Unsupported basis type."
-    assert (
-        power_b == 1
-    ), "Projection: Only power_b=1 is supported for spherical Haar wavelets."
-    assert (
-        power_c == 1
-    ), "Projection: Only power_c=1 is supported for spherical Haar wavelets."
-    v_max = physics_params["v_max"]
-    vdf = physics_params["vdf"]
-    vdf_params = physics_params["vdf_params"]
-
-    modelname = file_params["vdf_model"]
-    csvname = file_params["csvname"]
-    write_info = {
-        "basis": basis,
-        "v_max": v_max,
-        "n_a": n_a,
-        "n_b": n_b,
-        "n_c": n_c,
-        "power_a": power_a,
-        "power_b": power_b,
-        "power_c": power_c,
-        "vdf_model": modelname,
-        "vdf_params": vdf_params,
-    }
-
-    if verbose:
-        print(f"    Using {basis} basis with n_max={max(n_list)}, l_max={max(l_list)}")
-        print(f"    Grid size: n_a={n_a}, n_b={n_b}, n_c={n_c}")
-        print(
-            f"    Grid rescaled: power_a={power_a}, power_b={power_b}, power_c={power_c}"
-        )
-
-        print("\n    Generate grids and calculating form factor...")
-        start_time = time.time()
-
-    # Prepare grid points and basis function values
-    lm_list = [(l, m) for l in l_list for m in range(-l, l + 1)]
-    v_xyz_list, y_lm_vals, jacob_vals = generate_mesh_ylm_jacob(
-        lm_list, v_max, n_a, n_b, n_c, power_a, power_b, power_c
-    )
-
-    # Calculate vdf on grid
-    vdf_vals = np.array([vdf(v_vec, *vdf_params) for v_vec in v_xyz_list]).reshape(
-        n_a, n_b, n_c
-    )
-    del v_xyz_list
-
-    if verbose:
-        end_time = time.time()
-        print(f"    VDF calculation completed in {end_time - start_time:.2f} seconds.")
-        print("\n    Projecting VDF onto basis functions and saving results...")
-
-    # Project vdf onto basis functions
-    f_nlm = proj_get_f_nlm(
-        n_list,
-        lm_list,
-        vdf_vals,
-        y_lm_vals,
-        jacob_vals,
-        basis,
-        n_a,
-        power_a,
-        verbose=verbose,
-    )
-
-    # Save to CSV
-    utility.writeFnlm_csv(
-        csvsave_name=csvname + ".csv",
-        f_nlm_coeffs=f_nlm,
-        info=write_info,
-        use_gvar=False,
-    )
-
-    if verbose:
-        print("    Projection completed.")
-        print(f"    Coefficients saved to {csvname}.csv")
-        end_total_time = time.time()
-        print(
-            f"    Total projection time: {end_total_time - start_total_time:.2f} seconds."
-        )
-
-
-def proj_mcalI(physics_params, numerics_params, file_params, verbose=False) -> None:
-    """
-    Project the McalI integral onto basis functions.
-
-    Args:
-        l_list:
-            list[int]: List of angular quantum numbers.
-        nv_list:
-            list[int]: List of radial quantum numbers for velocity.
-        nq_list:
-            list[int]: List of radial quantum numbers for momentum transfer.
-        mass:
-            float: Dark matter mass in eV.
-        energy:
-            float: Energy transfer in eV.
-        fn:
-            float: Form factor index.
-        physics_params:
-            dict: Dictionary of physics parameters.
-        numerics_params:
-            dict: Dictionary of numerical parameters.
-        file_params:
-            dict: Dictionary of file parameters.
-        verbose:
-            bool: Whether to print verbose output.
-
-    Returns:
-        None
-    """
-
-    if verbose:
-        print("\n    Starting projection of McalI onto basis functions...")
-        start_total_time = time.time()
-
-    l_list = numerics_params["l_list"]
-    nv_list = numerics_params["nv_list"]
-    nq_list = numerics_params["nq_list"]
-    shape = (len(l_list), len(nv_list), len(nq_list))
-
-    mass_list = physics_params["mass_list"]
-    fdm_list = physics_params["fdm_list"]
-
-    basis = numerics_params.get("basis", "haar")
-    assert basis in ["haar"], "Projection: Unsupported basis type."
-
-    v_max = physics_params["v_max"]
-    basis_v = dict(u0=v_max, type="wavelet", uMax=v_max)
-
-    q_max_list = physics_params["q_max"]
-    assert len(mass_list) == len(
-        q_max_list
-    ), "Length of mass_list and q_max_list must be the same."
-
-    energy_threshold = physics_params["threshold"]
-    energy_bin_width = numerics_params["energy_bin_width"]
-    energy_max = numerics_params["energy_max"]
-    energy_bin_num = int((energy_max - energy_threshold) / energy_bin_width) + 1
-
-    mass_sm = physics_params["mass_sm"]
-
-    for i_mass, mass in enumerate(mass_list):
-
-        if verbose:
-            print(f"\n    Projecting for mass mX = {mass} eV...")
-
-        q_max = q_max_list[i_mass]
-        basis_q = dict(u0=q_max, type="wavelet", uMax=q_max)
-
-        for fdm in fdm_list:
-
-            if verbose:
-                print(f"      Projecting for f_n = {fdm}...")
-
-            for i_bin in range(energy_bin_num):
-
-                if verbose:
-                    if i_bin % (energy_bin_num // 5 + 1) == 0:
-                        print(
-                            f"        Projecting energy bin {i_bin}/{energy_bin_num-1}..."
-                        )
-
-                energy = energy_threshold + (i_bin + 0.5) * energy_bin_width
-                dm_model = dict(mX=mass, fdm=fdm, mSM=mass_sm, DeltaE=energy)
-
-                mI = vsdm.McalI(
-                    basis_v, basis_q, dm_model, use_gvar=False, do_mcalI=False
-                )
-
-                coef = np.zeros(shape, dtype=float)
-                for i_l, l in enumerate(l_list):
-                    for i_nv, nv in enumerate(nv_list):
-                        for i_nq, nq in enumerate(nq_list):
-                            coef[i_l, i_nv, i_nq] = mI.getI_lvq_analytic((l, nv, nq))
-
-                utility.write_hdf5(
-                    hdf5file=file_params["hdf5name"] + ".hdf5",
-                    groupname=f"mcalI/{mass:.3e}/{fdm}/{i_bin}",
-                    datasetname="Ilvq_mean",
-                    data=coef,
-                )
-
-            utility.write_hdf5(
-                hdf5file=file_params["hdf5name"] + ".hdf5",
-                groupname=f"mcalI/{mass:.3e}/{fdm}/info",
-                info={
-                    "l_list": np.array(l_list),
-                    "nv_list": np.array(nv_list),
-                    "nq_list": np.array(nq_list),
-                    "v_max": np.array([v_max]),
-                    "q_max": np.array([q_max]),
-                    "mass": np.array([mass]),
-                    "fdm": np.array([fdm]),
-                    "mass_sm": np.array([mass_sm]),
-                    "energy_threshold": np.array([energy_threshold]),
-                    "energy_bin_width": np.array([energy_bin_width]),
-                    "energy_bin_num": np.array([energy_bin_num]),
-                },
-            )
-
-    if verbose:
-        end_total_time = time.time()
-        print(
-            f"    Total projection time: {end_total_time - start_total_time:.2f} seconds."
-        )
 
 
 class Fnlm:
@@ -822,7 +427,10 @@ class Fnlm:
             dset = grp.create_dataset(dataname, data=self.f_lm_n)
             dset.attrs["l_max"] = self.l_max
             dset.attrs["l_mod"] = self.l_mod
-            dset.attrs["n_list"] = self.n_list
+            if "n_list" in grp:
+                del grp["n_list"]
+            grp.create_dataset("n_list", data=self.n_list)
+            # dset.attrs["n_list"] = self.n_list
             if write_info:
                 for key, value in self.info.items():
                     dset.attrs[key] = value
@@ -841,7 +449,7 @@ class Fnlm:
             self.f_lm_n = dset[()]
             self.l_max = dset.attrs["l_max"]
             self.l_mod = dset.attrs["l_mod"]
-            self.n_list = dset.attrs["n_list"]
+            self.n_list = grp["n_list"][()]
             self.info = {
                 key: dset.attrs[key]
                 for key in dset.attrs
@@ -929,7 +537,10 @@ class BinnedFnlm:
             grp = h5f.require_group(groupname)
             grp.attrs["n_bins"] = self.n_bins
             grp.attrs["l_max"] = self.l_max
-            grp.attrs["n_list"] = self.n_list
+            if "n_list" in grp:
+                del grp["n_list"]
+            grp.create_dataset("n_list", data=self.n_list)
+            # grp.attrs["n_list"] = self.n_list
             for key, value in self.info.items():
                 grp.attrs[key] = value
             for idx_bin, fnlm in self.fnlms.items():
@@ -955,7 +566,8 @@ class BinnedFnlm:
             grp = h5f[groupname]
             self.n_bins = grp.attrs["n_bins"]
             self.l_max = grp.attrs["l_max"]
-            self.n_list = grp.attrs["n_list"]
+            self.n_list = grp["n_list"][()]
+            # self.n_list = grp.attrs["n_list"]
             self.info = {
                 key: grp.attrs[key]
                 for key in grp.attrs
@@ -1042,11 +654,11 @@ class VDF(Fnlm):
         n_list = np.array(n_list)
 
         n_a, n_b, n_c = params.get("n_grid", self.n_grid)
-        p_a, p_b, p_c = params.get("power_grid", (1, 1, 1))
+        # p_a, p_b, p_c = params.get("power_grid", (1, 1, 1))
 
-        assert (
-            p_b == 1 and p_c == 1
-        ), "Currently only power 1 is supported for angular grids."
+        # assert (
+        #     p_b == 1 and p_c == 1
+        # ), "Currently only power 1 is supported for angular grids."
 
         if verbose:
             if "model" in self.info:
@@ -1055,15 +667,15 @@ class VDF(Fnlm):
             print(f"    Reference velocity v_max = {v_max:.2e}.")
             print(f"    Projecting onto basis with l_max={l_max}, n_max={max(n_list)}.")
             print(f"    Grid size: n_a={n_a}, n_b={n_b}, n_c={n_c}")
-            print(f"    Grid rescaled: power_a={p_a}, power_b={p_b}, power_c={p_c}")
+            # print(f"    Grid rescaled: power_a={p_a}, power_b={p_b}, power_c={p_c}")
 
             print("\n    Generate grids and calculating form factor...")
             start_time = time.time()
 
         # Prepare grid points and basis function values
         lm_list = [(l, m) for l in range(l_max + 1) for m in range(-l, l + 1)]
-        v_xyz_list, y_lm_vals, jacob_vals = generate_mesh_ylm_jacob(
-            lm_list, v_max, n_a, n_b, n_c, p_a, p_b, p_c
+        v_xyz_list, _, y_lm_vals, jacob_vals = generate_mesh_ylm_jacob(
+            lm_list, v_max, n_a, n_b, n_c  # , p_a, p_b, p_c
         )
 
         # Calculate vdf on grid
@@ -1088,7 +700,7 @@ class VDF(Fnlm):
             jacob_vals,
             "haar",
             n_a,
-            p_a,
+            # p_a,
             verbose=verbose,
         )
         del vdf_vals, y_lm_vals, jacob_vals
@@ -1148,6 +760,7 @@ class FormFactor(BinnedFnlm):
         self.q_max = numerics_params.get("q_max", 1.0)
         self.n_grid = numerics_params.get("n_grid", (32, 25, 25))
         self.special_mesh = numerics_params.get("special_mesh", False)
+        self.log_wavelet = numerics_params.get("log_wavelet", False)
         self.q_cut = numerics_params.get("q_cut", False)
 
         # Store additional info
@@ -1156,6 +769,7 @@ class FormFactor(BinnedFnlm):
         self.info["q_max"] = self.q_max
         self.info["n_grid"] = self.n_grid
         self.info["special_mesh"] = self.special_mesh
+        self.info["log_wavelet"] = self.log_wavelet
         self.info["q_cut"] = self.q_cut
 
         if "model" in physics_params:
@@ -1191,20 +805,14 @@ class FormFactor(BinnedFnlm):
         n_list = np.array(n_list)
 
         n_a, n_b, n_c = params.get("n_grid", self.n_grid)
-        p_a, p_b, p_c = params.get("power_grid", (1, 1, 1))
-        special_mesh = params.get("special_mesh", self.special_mesh)
-
-        assert (
-            p_b == 1 and p_c == 1
-        ), "Currently only power 1 is supported for angular grids."
+        # p_a, p_b, p_c = params.get("power_grid", (1, 1, 1))
+        log_wavelet = params.get("log_wavelet", self.log_wavelet)
 
         energy_threshold = params.get("energy_threshold", self.energy_threshold)
         energy_bin_width = params.get("energy_bin_width", self.energy_bin_width)
         energy_max_factor = params.get("energy_max_factor", self.energy_max_factor)
         energy_max = physics.get_energy_max(phonon_file, factor=energy_max_factor)
         energy_bin_num = int((energy_max - energy_threshold) / energy_bin_width) + 1
-        self.n_bins = energy_bin_num
-        self.info["n_bins"] = self.n_bins
 
         q_max = params.get("q_max", self.q_max)
         q_cut_option = params.get("q_cut", self.q_cut)
@@ -1216,13 +824,23 @@ class FormFactor(BinnedFnlm):
             verbose=verbose,
         )
 
+        # Store results
+        self.l_max = l_max
+        self.n_list = n_list
+        self.q_max = q_max
+        self.log_wavelet = log_wavelet
+        self.n_bins = energy_bin_num
+        self.info["n_bins"] = self.n_bins
+
         if verbose:
             if "material" in self.info:
                 print(f"    Material: {self.info['material']}")
+            if log_wavelet:
+                print("    Using log wavelet mesh for projection.")
             print(f"    Reference momentum q_max = {q_max:.2e} eV.")
             print(f"    Projecting onto basis with l_max={l_max}, n_max={max(n_list)}.")
             print(f"    Grid size: n_a={n_a}, n_b={n_b}, n_c={n_c}")
-            print(f"    Grid rescaled: power_a={p_a}, power_b={p_b}, power_c={p_c}")
+            # print(f"    Grid rescaled: power_a={p_a}, power_b={p_b}, power_c={p_c}")
             print(
                 f"    Energy bins: {energy_bin_num} bins from {energy_threshold:.2e} eV to {energy_max:.2e} eV"
             )
@@ -1232,16 +850,17 @@ class FormFactor(BinnedFnlm):
 
         # Prepare grid points and basis function values
         lm_list = [(l, m) for l in range(l_max + 1) for m in range(-l, l + 1)]
-        q_xyz_list, y_lm_vals, jacob_vals = generate_mesh_ylm_jacob(
-            lm_list, q_max, n_a, n_b, n_c, p_a, p_b, p_c
-        )
-        if special_mesh:
+        if log_wavelet:
             q_min = energy_threshold / (const.VESC + const.VE)
-            lam_start = basis_funcs.haar_n_to_lam_mu(max(n_list))[0] + 1
-            q_xyz_list_exp, jacob_vals_exp, n_list_exp = (
-                generate_special_mesh_jacob_nlist(
-                    q_max, q_min, n_b, n_c, lam_start, verbose=verbose
-                )
+            eps = q_min / q_max
+            self.info["log_wavelet_eps"] = eps
+            q_xyz_list, y_lm_vals, jacob_vals = generate_log_mesh_ylm_jacob(
+                lm_list, q_max, n_a, n_b, n_c, eps=eps
+            )
+        else:
+            eps = 0.
+            q_xyz_list, y_lm_vals, jacob_vals = generate_mesh_ylm_jacob(
+                lm_list, q_max, n_a, n_b, n_c
             )
 
         # Calculate form factor on grid
@@ -1256,18 +875,6 @@ class FormFactor(BinnedFnlm):
             phonon_file,
         ).reshape(energy_bin_num, n_a, n_b, n_c)
         del q_xyz_list
-        if special_mesh:
-            form_factor_bin_vals_exp = physics.form_factor(
-                q_xyz_list_exp,
-                energy_threshold,
-                energy_bin_width,
-                energy_max,
-                n_DW_params,
-                phonopy_params,
-                c_dict,
-                phonon_file,
-            ).reshape(energy_bin_num, -1, n_b, n_c)
-            del q_xyz_list_exp
 
         if verbose:
             end_time = time.time()
@@ -1289,33 +896,14 @@ class FormFactor(BinnedFnlm):
                     print(f"      Projecting energy bin {i_bin}/{energy_bin_num-1}...")
 
             f_nlm = proj_get_f_nlm(
-                n_list,
-                lm_list,
-                form_factor_bin_vals[i_bin, :, :, :],
-                y_lm_vals,
-                jacob_vals,
-                "haar",
+                n_list, lm_list,
+                form_factor_bin_vals[i_bin, :, :, :], y_lm_vals, jacob_vals,
                 n_a,
-                p_a,
-                verbose=verbose,
+                # p_a,
+                log_wavelet=log_wavelet, eps=eps, verbose=verbose,
             )
             self.fnlms[i_bin].l_max = l_max
             self.fnlms[i_bin].n_list = n_list
-
-            if special_mesh:
-                f_nlm_exp = proj_get_f_nlm(
-                    n_list_exp,
-                    lm_list,
-                    form_factor_bin_vals_exp[i_bin, :, :, :],
-                    y_lm_vals,
-                    jacob_vals_exp,
-                    "haar",
-                    len(n_list_exp),
-                    p_a,
-                    special_mesh=True,
-                    verbose=verbose,
-                )
-                self.fnlms[i_bin].n_list = np.concatenate((n_list, n_list_exp))
 
             self.fnlms[i_bin].f_lm_n = np.zeros(
                 (
@@ -1328,21 +916,9 @@ class FormFactor(BinnedFnlm):
                 for m in range(-l, l + 1):
                     idx_lm = self.fnlms[i_bin].get_lm_index(l, m)
                     for idx_n, n in enumerate(n_list):
-                        self.fnlms[i_bin].f_lm_n[idx_lm, idx_n] = f_nlm.get(
-                            (n, l, m), 0.0
+                        self.fnlms[i_bin].f_lm_n[idx_lm, idx_n] = (
+                            f_nlm.get((n, l, m), 0.0)
                         )
-                    if special_mesh:
-                        for idx_n_exp, n_exp in enumerate(n_list_exp):
-                            idx_n_total = len(n_list) + idx_n_exp
-                            self.fnlms[i_bin].f_lm_n[idx_lm, idx_n_total] = (
-                                f_nlm_exp.get((n_exp, l, m), 0.0)
-                            )
-
-        # Store results
-        self.l_max = l_max
-        self.n_list = n_list
-        self.q_max = q_max
-        self.special_mesh = special_mesh
 
         if verbose:
             print("    Projection completed.")
@@ -1423,9 +999,13 @@ class McalI:
         self.q_max = numerics_params.get("q_max", 1.0)
 
         self.fdm = physics_params.get("fdm", (0, 0))
+        self.q0_fdm = physics_params.get("q0_fdm", const.Q_BOHR)
         self.energy = physics_params.get("energy", 0.0)
         self.mass_dm = physics_params.get("mass_dm", 10**6)
         self.mass_sm = physics_params.get("mass_sm", const.M_NUCL)
+
+        self.log_wavelet_q = numerics_params.get("log_wavelet_q", False)
+        self.eps_q = numerics_params.get("eps_q", 0.0)
 
         self.mcalI = np.array(
             (self.l_max + 1, len(self.nv_list), len(self.nq_list)), dtype=float
@@ -1444,14 +1024,22 @@ class McalI:
             dset = grp.create_dataset(dataname, data=self.mcalI)
             if write_info:
                 dset.attrs["l_max"] = self.l_max
-                dset.attrs["nv_list"] = self.nv_list
-                dset.attrs["nq_list"] = self.nq_list
+                if "nv_list" in grp:
+                    del grp["nv_list"]
+                grp.create_dataset("nv_list", data=self.nv_list)
+                if "nq_list" in grp:
+                    del grp["nq_list"]
+                grp.create_dataset("nq_list", data=self.nq_list)
+                # dset.attrs["nv_list"] = self.nv_list
+                # dset.attrs["nq_list"] = self.nq_list
                 dset.attrs["v_max"] = self.v_max
                 dset.attrs["q_max"] = self.q_max
                 dset.attrs["fdm"] = self.fdm
                 dset.attrs["energy"] = self.energy
                 dset.attrs["mass_dm"] = self.mass_dm
                 dset.attrs["mass_sm"] = self.mass_sm
+                dset.attrs["log_wavelet_q"] = self.log_wavelet_q
+                dset.attrs["eps_q"] = self.eps_q
                 for key, value in self.info.items():
                     dset.attrs[key] = value
 
@@ -1469,16 +1057,21 @@ class McalI:
             dset = grp[dataname]
             self.mcalI = dset[()]
 
+            self.nv_list = grp["nv_list"][()]
+            self.nq_list = grp["nq_list"][()]
+
             keys_to_load = [
                 "l_max",
-                "nv_list",
-                "nq_list",
+                # "nv_list",
+                # "nq_list",
                 "v_max",
                 "q_max",
                 "fdm",
                 "energy",
                 "mass_dm",
                 "mass_sm",
+                "log_wavelet_q",
+                "eps_q",
             ]
             for key in keys_to_load:
                 if key in dset.attrs:
@@ -1507,22 +1100,28 @@ class McalI:
         v_max = params.get("v_max", self.v_max)
         q_max = params.get("q_max", self.q_max)
         fdm = params.get("fdm", self.fdm)
+        q0_fdm = params.get("q0_fdm", self.q0_fdm)
         energy = params.get("energy", self.energy)
         mass_dm = params.get("mass_dm", self.mass_dm)
         mass_sm = params.get("mass_sm", self.mass_sm)
+        log_wavelet_q = params.get("log_wavelet_q", self.log_wavelet_q)
+        eps_q = params.get("eps_q", self.eps_q)
+        if log_wavelet_q and (eps_q <= 0.0 or eps_q >= 1.0):
+            raise ValueError("eps_q must be in (0, 1) for log wavelet basis in q.")
+        
+        if verbose:
+            print(f"    Using FDM form factor parameters: fdm={fdm}, q0_fdm={q0_fdm}, v0_fdm={1.0}.")
+            print(f"    Using DM and SM parameters: mass_dm={mass_dm:.2e} eV, mass_sm={mass_sm:.2e} eV, energy={energy:.2e} eV.")
+            print(f"    Parameters for wavelets:")
+            if log_wavelet_q:
+                print(f"      Log wavelet basis in q with eps_q={eps_q:.2e}.")
+            else:
+                print(f"      Standard (linear) wavelet basis in q.")
+            print(f"    Reference velocity v_max = {v_max:.2e}.")
+            print(f"    Reference momentum q_max = {q_max:.2e} eV.")
+            print(f"    Projecting onto basis with l_max={l_max}, nv_max={max(nv_list)}, nq_max={max(nq_list)}.")
 
-        # Prepare for projection using vsdm
-        basis_v = dict(u0=v_max, type="wavelet", uMax=v_max)
-        basis_q = dict(u0=q_max, type="wavelet", uMax=q_max)
-        dm_model = dict(mX=mass_dm, fdm=fdm, mSM=mass_sm, DeltaE=energy)
-        mI = vsdm.McalI(basis_v, basis_q, dm_model, use_gvar=False, do_mcalI=False)
-
-        # Projection
-        self.mcalI = np.zeros((l_max + 1, len(nv_list), len(nq_list)), dtype=float)
-        for l in range(l_max + 1):
-            for idx_nv, nv in enumerate(nv_list):
-                for idx_nq, nq in enumerate(nq_list):
-                    self.mcalI[l, idx_nv, idx_nq] = mI.getI_lvq_analytic((l, nv, nq))
+            print("\n    Calculating McalI matrix coefficients...")
 
         # Store results
         self.l_max = l_max
@@ -1531,14 +1130,60 @@ class McalI:
         self.v_max = v_max
         self.q_max = q_max
         self.fdm = fdm
+        self.q0_fdm = q0_fdm
         self.energy = energy
         self.mass_dm = mass_dm
         self.mass_sm = mass_sm
+        self.log_wavelet_q = log_wavelet_q
+        self.eps_q = eps_q
+
+        # Projection
+        self.mcalI = np.zeros((l_max + 1, len(nv_list), len(nq_list)), dtype=float)
+        for l in range(l_max + 1):
+            for idx_nv, nv in enumerate(nv_list):
+                for idx_nq, nq in enumerate(nq_list):
+                    self.mcalI[l, idx_nv, idx_nq] = self.getI_lvq_analytic((l, nv, nq))
 
         if verbose:
             print("    Projection completed.")
             end_time = time.time()
             print(f"    Total projection time: {end_time - start_time:.2f} seconds.")
+
+    def getI_lvq_analytic(self, lnvq, verbose=False):
+        """Analytic calculation for I(ell) matrix coefficients.
+
+        Only available for 'tophat' and 'wavelet' bases (so far).
+
+        Arguments:
+            lnvq = (ell, nv, nq)
+            verbose: whether to print output
+        """
+        v_max = self.v_max
+        q_max = self.q_max
+        mass_dm = self.mass_dm
+        fdm = self.fdm  # DM-SM scattering form factor index
+        # (a, b) = fdm
+        q0_fdm = self.q0_fdm  # reference momentum for FDM form factor
+        v0_fdm = 1.0  # reference velocity for FDM form factor
+        mass_sm = self.mass_sm  # SM particle mass (mElec)
+        energy = self.energy  # DM -> SM energy transfer
+        # mass_reduced = (mass_dm * mass_sm) / (mass_dm + mass_sm)
+        log_wavelet_q = self.log_wavelet_q
+        eps_q = self.eps_q
+
+        Ilvq = analytic.ilvq_analytic(
+            lnvq, v_max, q_max, log_wavelet_q, eps_q,
+            fdm, q0_fdm, v0_fdm, 
+            mass_dm, mass_sm, energy, verbose=verbose
+        )
+
+        # Ilvq = analytic.ilvq_vsdm(
+        #     lnvq, v_max, q_max, log_wavelet_q, eps_q,
+        #     fdm, q0_fdm, v0_fdm, 
+        #     mass_dm, mass_sm, energy, verbose=verbose
+        # )
+
+        return Ilvq
 
 
 class BinnedMcalI:
@@ -1552,10 +1197,14 @@ class BinnedMcalI:
         self.q_max = numerics_params.get("q_max", 1.0)
 
         self.fdm = physics_params.get("fdm", (0, 0))
+        self.q0_fdm = physics_params.get("q0_fdm", const.Q_BOHR)
         self.energy_threshold = physics_params.get("energy_threshold", 1e-3)
         self.energy_bin_width = physics_params.get("energy_bin_width", 1e-3)
         self.mass_dm = physics_params.get("mass_dm", 10**6)
         self.mass_sm = physics_params.get("mass_sm", const.M_NUCL)
+
+        self.log_wavelet_q = numerics_params.get("log_wavelet_q", False)
+        self.eps_q = numerics_params.get("eps_q", 0.0)
 
         self.mcalIs = {}  # to be filled after projection
         self.info = {}  # to be filled with relevant info
@@ -1570,8 +1219,14 @@ class BinnedMcalI:
 
             grp.attrs["n_bins"] = self.n_bins
             grp.attrs["l_max"] = self.l_max
-            grp.attrs["nv_list"] = self.nv_list
-            grp.attrs["nq_list"] = self.nq_list
+            if "nv_list" in grp:
+                del grp["nv_list"]
+            grp.create_dataset("nv_list", data=self.nv_list)
+            if "nq_list" in grp:
+                del grp["nq_list"]
+            grp.create_dataset("nq_list", data=self.nq_list)
+            # grp.attrs["nv_list"] = self.nv_list
+            # grp.attrs["nq_list"] = self.nq_list
             grp.attrs["v_max"] = self.v_max
             grp.attrs["q_max"] = self.q_max
 
@@ -1580,6 +1235,8 @@ class BinnedMcalI:
             grp.attrs["energy_bin_width"] = self.energy_bin_width
             grp.attrs["mass_dm"] = self.mass_dm
             grp.attrs["mass_sm"] = self.mass_sm
+            grp.attrs["log_wavelet_q"] = self.log_wavelet_q
+            grp.attrs["eps_q"] = self.eps_q
 
             for key, value in self.info.items():
                 grp.attrs[key] = value
@@ -1605,11 +1262,14 @@ class BinnedMcalI:
         with h5py.File(filename, "r") as h5f:
             grp = h5f[groupname]
 
+            self.nv_list = grp["nv_list"][()]
+            self.nq_list = grp["nq_list"][()]
+
             keys_to_load = [
                 "n_bins",
                 "l_max",
-                "nv_list",
-                "nq_list",
+                # "nv_list",
+                # "nq_list",
                 "v_max",
                 "q_max",
                 "fdm",
@@ -1617,6 +1277,8 @@ class BinnedMcalI:
                 "energy_bin_width",
                 "mass_dm",
                 "mass_sm",
+                "log_wavelet_q",
+                "eps_q",
             ]
             for key in keys_to_load:
                 if key in grp.attrs:
@@ -1648,7 +1310,10 @@ class BinnedMcalI:
                     raise ValueError(f"Inconsistent v_max in bin {idx_bin}.")
                 if mcalI.q_max != self.q_max:
                     raise ValueError(f"Inconsistent q_max in bin {idx_bin}.")
-
+                if mcalI.log_wavelet_q != self.log_wavelet_q:
+                    raise ValueError(f"Inconsistent log_wavelet_q in bin {idx_bin}.")
+                if mcalI.eps_q != self.eps_q:
+                    raise ValueError(f"Inconsistent eps_q in bin {idx_bin}.")
         if verbose:
             print(
                 f"    BinnedMcalI data read from {C_GREEN}{filename}{C_RESET}",
@@ -1678,6 +1343,8 @@ class BinnedMcalI:
 
         if "fdm" not in params_copy:
             params_copy["fdm"] = self.fdm
+        if "q0_fdm" not in params_copy:
+            params_copy["q0_fdm"] = self.q0_fdm
         if "energy_threshold" not in params_copy:
             params_copy["energy_threshold"] = self.energy_threshold
         if "energy_bin_width" not in params_copy:
@@ -1686,9 +1353,28 @@ class BinnedMcalI:
             params_copy["mass_dm"] = self.mass_dm
         if "mass_sm" not in params_copy:
             params_copy["mass_sm"] = self.mass_sm
+        if "log_wavelet_q" not in params_copy:
+            params_copy["log_wavelet_q"] = self.log_wavelet_q
+        if "eps_q" not in params_copy:
+            params_copy["eps_q"] = self.eps_q
+
+        if verbose:
+            print(f"    Using FDM form factor parameters: fdm={params_copy["fdm"]}, q0_fdm={params_copy["q0_fdm"]:.2e} eV, v0_fdm={1.0}.")
+            print(f"    Using DM and SM parameters: mass_dm={params_copy["mass_dm"]:.2e} eV, mass_sm={params_copy["mass_sm"]:.2e} eV")
+            print(f"    {n_bins} energy bins starting from")
+            print(f"    energy_threshold={params_copy['energy_threshold']:.2e} eV, energy_bin_width={params_copy['energy_bin_width']:.2e} eV.\n")
+            print(f"    Parameters for wavelets:")
+            if params_copy["log_wavelet_q"]:
+                print(f"    Log wavelet basis in q with eps_q={params_copy['eps_q']:.2e}.")
+            else:
+                print(f"    Standard (linear) wavelet basis in q.")
+            print(f"    Reference velocity v_max = {params_copy['v_max']:.2e}.")
+            print(f"    Reference momentum q_max = {params_copy['q_max']:.2e} eV.")
+            print(f"    Projecting onto basis with l_max={params_copy['l_max']}, nv_max={max(params_copy['nv_list'])}, nq_max={max(params_copy['nq_list'])}.")
+
+            print("\n    Calculating McalI matrix coefficients...")
 
         for idx_bin in range(n_bins):
-
             if verbose:
                 if idx_bin % (n_bins // 5 + 1) == 0:
                     print(f"        Projecting energy bin {idx_bin}/{n_bins-1}...")
@@ -1710,6 +1396,8 @@ class BinnedMcalI:
         self.v_max = params_copy["v_max"]
         self.q_max = params_copy["q_max"]
         self.fdm = params_copy["fdm"]
+        self.log_wavelet_q = params_copy["log_wavelet_q"]
+        self.eps_q = params_copy["eps_q"]
         if verbose:
             end_time = time.time()
             print(f"    Total projection time: {end_time - start_time:.2f} seconds.")

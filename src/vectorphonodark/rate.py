@@ -4,7 +4,8 @@ from . import utility
 
 
 class Rate:
-    def __init__(self, vdf, ff, mcalI, l_max=None, nv_list=None, nq_list=None):
+    def __init__(self, vdf, ff, mcalI, l_max=None, nv_list=None, nq_list=None,
+                 verbose=False):
 
         if l_max is None:
             self.l_max = min(vdf.l_max, ff.l_max, mcalI.l_max)
@@ -23,9 +24,9 @@ class Rate:
         else:
             self.nq_list = nq_list
 
-        self.mcalK = self.get_vecK(vdf, ff, mcalI)
+        self.mcalK = self.get_vecK(vdf, ff, mcalI, verbose=verbose)
 
-    def mu_R(self, wG):
+    def mu_R(self, wG, verbose=False):
         l_max = min(self.l_max, wG.ellMax)
         lmvmq_max = self.get_lmvmq_index(l_max, l_max, l_max)
 
@@ -33,12 +34,11 @@ class Rate:
             raise ValueError("l_mod of Rate and wG do not match.")
 
         return (
-            self.v_max**2
-            / self.q_max
+            self.v_max**2 / self.q_max
             * (wG.G_array[:, 0 : lmvmq_max + 1] @ self.mcalK[0 : lmvmq_max + 1])
         )
 
-    def get_vecK(self, vdf, ff, mcalI):
+    def get_vecK(self, vdf, ff, mcalI, verbose=False):
 
         if vdf.v_max != mcalI.v_max:
             raise ValueError("vdf.v_max and mcalI.v_max do not match.")
@@ -60,6 +60,12 @@ class Rate:
         )
         if nv_indices.size == 0 or nq_indices.size == 0:
             return vecK
+
+        if verbose:
+            print(
+                f"      Rate computation: Using {len(nv_indices[0])} velocity wavelets and "
+                f"          {len(nq_indices[0])} momentum wavelets."
+            )
 
         idx_nv_vdf = nv_indices[0]
         idx_nv_mcal = nv_indices[1]
@@ -105,7 +111,8 @@ class Rate:
 
 class BinnedRate:
     def __init__(
-        self, vdf, binnedff, binnedmcalI, l_max=None, nv_list=None, nq_list=None
+        self, vdf, binnedff, binnedmcalI, l_max=None, nv_list=None, nq_list=None,
+        verbose=False
     ):
         if l_max is None:
             self.l_max = min(vdf.l_max, binnedff.l_max, binnedmcalI.l_max)
@@ -124,9 +131,9 @@ class BinnedRate:
         else:
             self.nq_list = nq_list
 
-        self.mcalKs = self.get_binned_vecK(vdf, binnedff, binnedmcalI)
+        self.mcalKs = self.get_binned_vecK(vdf, binnedff, binnedmcalI, verbose=verbose)
 
-    def binned_mu_R(self, wG):
+    def binned_mu_R(self, wG, verbose=False):
         G_array = np.array(wG.G_array)
         binned_muR = {}
         for idx_bin, vecK in self.mcalKs.items():
@@ -143,7 +150,7 @@ class BinnedRate:
             )
         return binned_muR
 
-    def get_binned_vecK(self, vdf, binnedff, binnedmcalI):
+    def get_binned_vecK(self, vdf, binnedff, binnedmcalI, verbose=False):
 
         if vdf.v_max != binnedmcalI.v_max:
             raise ValueError("vdf.v_max and mcalI.v_max do not match.")
@@ -163,6 +170,7 @@ class BinnedRate:
                 l_max=self.l_max,
                 nv_list=self.nv_list,
                 nq_list=self.nq_list,
+                verbose=verbose,
             ).mcalK
             binned_vecK[idx_bin] = vecK
         return binned_vecK

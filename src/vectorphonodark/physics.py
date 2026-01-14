@@ -194,7 +194,7 @@ def form_factor(q_xyz_list: np.ndarray,
     return form_factor_bin_vals
 
 
-@numba.njit(fastmath=True)
+@numba.njit(fastmath=False)
 def form_factor_numba(q_xyz_list, G_xyz_list, ph_eigenvectors, ph_omega,
                       energy_threshold, energy_bin_width, energy_max,
                       W_tensor, fe0, fn0, fp0,

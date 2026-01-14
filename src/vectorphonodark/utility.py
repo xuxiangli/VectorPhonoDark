@@ -24,6 +24,27 @@ else:
     C_RESET = ""
 
 
+@numba.njit
+def check_cancellation(val1, val2, tag=""):
+    diff = val1 - val2
+    if abs(diff) == 0.0:
+        return
+    
+    max_val = max(abs(val1), abs(val2))
+    if max_val > 1e-20: # avoid checking very small numbers
+        loss_ratio = max_val / abs(diff)
+        
+        if loss_ratio > 1e10:
+            print("!!! Precision Lost Warning !!!")
+            if tag != "":
+                print("Location:", tag)
+            print("Value A:", val1)
+            print("Value B:", val2)
+            print("Diff   :", diff)
+            print("Lost significant digits: > 10")
+            print("-" * 20)
+
+
 def import_file(full_name, path):
     """
     Import a module from a given file path.

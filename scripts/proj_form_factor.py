@@ -6,7 +6,7 @@ input_path = (
 )
 output_path = "/Users/jukcoeng/Desktop/Dark_Matter/Vector Space Integration/VectorPhonoDark/output/"
 
-mass = 10**6  # in eV
+mass = 10**7  # in eV
 
 physics_params = {
     "energy_threshold": 1e-3,  # eV
@@ -20,10 +20,9 @@ numerics_params = {
     # reference momentum scale in eV
     "q_max": 2 * mass * (const.VESC + const.VE),
     "l_max": 5,
-    "n_list": list(range(2**10)),
-    "n_grid": (1024, 25, 25),
-    "special_mesh": True,
-    # 'basis': 'haar',
+    "n_list": (list(range(2**11))),
+    "n_grid": (2**11, 25, 25),
+    "log_wavelet": True,
     # whether to compute q_cut from Debye-Waller factor
     "q_cut": False,
 }
@@ -33,11 +32,11 @@ input_params = {
     "numerics_input": input_path + "inputs/numerics/standard.py",
 }
 file_params = {
-    "csv": output_path
-    + f'form_factor/GaAs/test/{physics_params["model"]}_{mass/10**6}MeV_{numerics_params["n_grid"]}'
-    + ".csv",
-    "hdf5": output_path + "test" + ".hdf5",
-    "hdf5_group": f'form_factor/{physics_params["model"]}/{mass/10**6}MeV/{numerics_params['n_grid']}',
+    # "csv": output_path
+    # + f'form_factor/Al2O3/test/{physics_params["model"]}_{mass/10**6}MeV_{numerics_params["n_grid"]}'
+    # + ".csv",
+    "hdf5": output_path + "test_diff_grids_form_factor" + ".hdf5",
+    "hdf5_group": f'form_factor/{physics_params["model"]}/{mass/10**6}MeV/{numerics_params["n_grid"]}_log',
     "hdf5_data": "data",
 }
 params = {**physics_params, **numerics_params, **input_params}
