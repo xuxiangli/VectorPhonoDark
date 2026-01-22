@@ -52,10 +52,10 @@ numerics_params = {
     # 'basis': 'haar',
 }
 file_params = {
-    "csv": output_path
-    + f"vdf/{physics_params['model']}_230_240_600_{numerics_params['n_grid']}"
-    + ".csv",
-    "hdf5": output_path + "VDF" + ".hdf5",
+    # "csv": output_path
+    # + f"vdf/{physics_params['model']}_230_240_600_{numerics_params['n_grid']}"
+    # + ".csv",
+    "hdf5": output_path + "vdf" + ".hdf5",
     "hdf5_group": f"vdf/{physics_params['model']}/230_240_600/{numerics_params['n_grid']}",
     "hdf5_data": "data",
 }

@@ -343,6 +343,12 @@ def ilvq_analytic(lnvq, v_max, q_max, log_wavelet_q, eps_q,
 def ilvq_vsdm(lnvq, v_max, q_max, log_wavelet_q, eps_q, 
               fdm, q0_fdm, v0_fdm,
               mass_dm, mass_sm, energy, verbose=False):
+        """
+        Compute I_l(nv,nq) using the vsdm package.
+        Only works for linear wavelets.
+        The scaling for q and v are fixed inside vsdm.McalI,
+            with q0_fdm = Q_BOHR and v0_fdm = 1.0.
+        """
         
         if log_wavelet_q:
             raise NotImplementedError("vsdm McalI does not support log wavelets yet.")

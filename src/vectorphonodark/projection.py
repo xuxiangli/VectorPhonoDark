@@ -168,7 +168,7 @@ def proj_get_wavelet_boundary(n, n_a, power_a=1) -> tuple[int, int, int]:
     """
 
     if n == 0:
-        r_min_idx = 0.
+        r_min_idx = 0
         r_mid_idx = n_a
         r_max_idx = n_a
     else:
@@ -193,7 +193,7 @@ def proj_get_wavelet_boundary_log(n, n_a, eps) -> tuple[int, int, int]:
     """
 
     if n == 0:
-        r_min_idx = 0.
+        r_min_idx = 0
         r_mid_idx = n_a
         r_max_idx = n_a
     else:
@@ -674,7 +674,7 @@ class VDF(Fnlm):
 
         # Prepare grid points and basis function values
         lm_list = [(l, m) for l in range(l_max + 1) for m in range(-l, l + 1)]
-        v_xyz_list, _, y_lm_vals, jacob_vals = generate_mesh_ylm_jacob(
+        v_xyz_list, y_lm_vals, jacob_vals = generate_mesh_ylm_jacob(
             lm_list, v_max, n_a, n_b, n_c  # , p_a, p_b, p_c
         )
 

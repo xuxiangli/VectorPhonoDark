@@ -10,7 +10,7 @@ from vectorphonodark.rate import BinnedRate
 
 output_path = "/Users/jukcoeng/Desktop/Dark_Matter/Vector Space Integration/VectorPhonoDark/output/"
 
-mass = 10**7
+mass = 10**6
 f_med = 2
 q0 = mass * const.V0  # reference momentum transfer in eV
 q_factor = (q0 / const.Q_BOHR) ** (2 * f_med)
@@ -30,18 +30,18 @@ wG = vsdm.WignerG(l_max, rotations=rotationlist)
 
 file_params_vdf = {
     # 'csv': output_path+'vdf/shm_230_240_600_128_180_180_1'+'.csv',
-    "hdf5": output_path + "VDF" + ".hdf5",
+    "hdf5": output_path + "/diff_precision/mp_8_vdf" + ".hdf5",
     "hdf5_group": "vdf/SHM/230_240_600/(128, 180, 180)",
     "hdf5_data": "data",
 }
 file_params_form_factor = {
     # 'csv': output_path+'form_factor/GaAs/test/GaAs_hadrophilic_1MeV_128_25_25'+'.csv',
-    "hdf5": output_path + "test_diff_grids_form_factor" + ".hdf5",
-    "hdf5_group": f"form_factor/GaAs_hadrophilic/{mass/10**6}MeV/(2048, 25, 25)_log",
+    "hdf5": output_path + "/diff_precision/mp_8_form_factor" + ".hdf5",
+    "hdf5_group": f"form_factor/GaAs_hadrophilic/{mass/10**6}MeV/(128, 25, 25)_log",
     "hdf5_data": "data",
 }
 file_params_mcalI = {
-    "hdf5": output_path + "test_diff_grids_mcalI_2" + ".hdf5",
+    "hdf5": output_path + "/diff_precision/mp_8_mcalI" + ".hdf5",
     "hdf5_group": f"mcalI/{mass/10**6}MeV/({-2*f_med}, 0)_log",
     "hdf5_data": "data",
 }
@@ -81,10 +81,10 @@ rate_r = sum(binned_mu_R for binned_mu_R in binned_rate.binned_mu_R(wG=wG).value
 
 for i_rot in range(len(rotationlist)):
     reach = (
-        events_per_year / const.KG_YR / (factor * rate_r[i_rot]) * const.inveV_to_cm**2
+        events_per_year / const.KG_YR / (factor * float(rate_r[i_rot])) * const.inveV_to_cm**2
     )
     print(f"Mass {mass/10**6} MeV, f_med {f_med}, rotation {i_rot}:")
     print(
         f"    Projected reach for {events_per_year} events "
-        f"per year: {reach:.4e} cm^2"
+        f"per year: {float(reach):.4e} cm^2"
     )
