@@ -12,9 +12,14 @@ from . import constants as const
 from . import basis_funcs
 from . import utility
 from .utility import C_GREEN, C_CYAN, C_RESET
-from . import phonopy_funcs
 from . import physics
-from . import analytic
+
+# from . import analytic
+try:
+    from . import analytic_cy as analytic
+except ImportError:
+    print("Warning: Could not load Cython module, falling back to Python version.")
+    from . import analytic
 
 
 @numba.njit
@@ -978,7 +983,7 @@ class FormFactor(BinnedFnlm):
                 force_sets_filename=force_sets_path,
             )
 
-        phonopy_params = phonopy_funcs.get_phonon_file_data(phonon_file, born_exists)
+        phonopy_params = utility.get_phonon_file_data(phonon_file, born_exists)
 
         n_DW_params = {
             "n_DW_x": num_mod.numerics_parameters["n_DW_x"],
@@ -1013,7 +1018,8 @@ class McalI:
         self.info = {}
 
     def export_hdf5(
-        self, filename, groupname, dataname="data", write_info=True, verbose=True
+        self, filename, groupname, dataname="data", 
+        write_info=True, verbose=True, dtype=np.float64
     ):
         if not filename.endswith(".hdf5"):
             filename += ".hdf5"
@@ -1021,7 +1027,7 @@ class McalI:
             grp = h5f.require_group(groupname)
             if dataname in grp:
                 del grp[dataname]
-            dset = grp.create_dataset(dataname, data=self.mcalI)
+            dset = grp.create_dataset(dataname, data=self.mcalI, dtype=dtype)
             if write_info:
                 dset.attrs["l_max"] = self.l_max
                 if "nv_list" in grp:
@@ -1138,11 +1144,12 @@ class McalI:
         self.eps_q = eps_q
 
         # Projection
-        self.mcalI = np.zeros((l_max + 1, len(nv_list), len(nq_list)), dtype=float)
-        for l in range(l_max + 1):
-            for idx_nv, nv in enumerate(nv_list):
-                for idx_nq, nq in enumerate(nq_list):
-                    self.mcalI[l, idx_nv, idx_nq] = self.getI_lvq_analytic((l, nv, nq))
+        # self.mcalI = np.zeros((l_max + 1, len(nv_list), len(nq_list)), dtype=float)
+        # for l in range(l_max + 1):
+        #     for idx_nv, nv in enumerate(nv_list):
+        #         for idx_nq, nq in enumerate(nq_list):
+        #             self.mcalI[l, idx_nv, idx_nq] = self.getI_lvq_analytic((l, nv, nq))
+        self.mcalI = self.get_mcalI(l_max, nv_list, nq_list)
 
         if verbose:
             print("    Projection completed.")
@@ -1185,6 +1192,27 @@ class McalI:
 
         return Ilvq
 
+    def get_mcalI(self, l_max, nv_list, nq_list):
+        v_max = self.v_max
+        q_max = self.q_max
+        mass_dm = self.mass_dm
+        fdm = self.fdm  # DM-SM scattering form factor index
+        # (a, b) = fdm
+        q0_fdm = self.q0_fdm  # reference momentum for FDM form factor
+        v0_fdm = 1.0  # reference velocity for FDM form factor
+        mass_sm = self.mass_sm  # SM particle mass (mElec)
+        energy = self.energy  # DM -> SM energy transfer
+        # mass_reduced = (mass_dm * mass_sm) / (mass_dm + mass_sm)
+        log_wavelet_q = self.log_wavelet_q
+        eps_q = self.eps_q
+
+        return analytic.ilvq(
+            l_max, np.array(nv_list, dtype=int), np.array(nq_list, dtype=int), 
+            v_max, q_max, log_wavelet_q, eps_q,
+            fdm, q0_fdm, v0_fdm, 
+            mass_dm, mass_sm, energy
+        )
+
 
 class BinnedMcalI:
     def __init__(self, physics_params, numerics_params):
@@ -1210,7 +1238,8 @@ class BinnedMcalI:
         self.info = {}  # to be filled with relevant info
 
     def export_hdf5(
-        self, filename, groupname, dataname="data", write_sub_info=True, verbose=True
+        self, filename, groupname, dataname="data", 
+        write_sub_info=True, verbose=True, dtype=np.float64
     ):
         if not filename.endswith(".hdf5"):
             filename += ".hdf5"
@@ -1248,6 +1277,7 @@ class BinnedMcalI:
                     dataname,
                     write_info=write_sub_info,
                     verbose=False,
+                    dtype=dtype,
                 )
 
         if verbose:

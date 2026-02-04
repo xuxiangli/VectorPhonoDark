@@ -21,3 +21,5 @@ Before running the scripts, please run the following command in terminal such th
 ```shell
 pip install -e .
 ```
+
+Cython is being used for performance. You must have a C compiler installed. If you want to use pure python mode, please delete the file `analytic_cy.pyx`.

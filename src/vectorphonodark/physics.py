@@ -3,7 +3,6 @@ import numpy as np
 import math
 
 from . import constants as const
-from . import phonopy_funcs
 from . import utility
 
 
@@ -34,7 +33,7 @@ def get_energy_max(phonon_file, factor=1.2) -> float:
     Returns:
         float: The maximum phonon energy in eV.
     """
-    _, ph_omega_delta_E = phonopy_funcs.run_phonopy(
+    _, ph_omega_delta_E = utility.run_phonopy(
         phonon_file, [[0., 0., 0.]])
 
     max_delta_E = factor*np.amax(ph_omega_delta_E)
@@ -47,7 +46,7 @@ def compute_q_cut(phonon_file, atom_masses):
         Returns q = 10*sqrt(max(m)*max(omega))
     """
 
-    _, ph_omega = phonopy_funcs.run_phonopy(
+    _, ph_omega = utility.run_phonopy(
         phonon_file, np.array([[0., 0., 0.]]))
 
     q_cut = 10.0*np.sqrt(np.amax(atom_masses)*np.amax(ph_omega))
@@ -110,7 +109,7 @@ def calculate_W_tensor(phonon_file, num_atoms, atom_masses,
 
                     k_list.append(k_vec)
 
-    [eigenvectors, omega] = phonopy_funcs.run_phonopy(phonon_file, k_list)
+    [eigenvectors, omega] = utility.run_phonopy(phonon_file, k_list)
 
     W_tensor = np.zeros((num_atoms, 3, 3), dtype=complex)
 

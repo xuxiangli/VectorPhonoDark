@@ -29,10 +29,6 @@ from numba import objmode
 import scipy.special as spf
 
 from . import basis_funcs
-# from .utility import check_cancellation
-
-
-# CHECK_CANCELLATION = False
 
 
 @numba.njit
@@ -367,3 +363,24 @@ def ilvq_vsdm(lnvq, v_max, q_max, log_wavelet_q, eps_q,
         Ilvq = mI.getI_lvq_analytic((ell, nv, nq))
 
         return Ilvq
+
+
+@numba.njit(parallel=True)
+def ilvq(l_max, nv_list, nq_list, 
+         v_max, q_max, log_wavelet_q, eps_q, 
+         fdm, q0_fdm, v0_fdm,
+         mass_dm, mass_sm, energy, verbose=False):
+    
+    shape = (l_max + 1, len(nv_list), len(nq_list))
+    ilvq_array = np.zeros(shape, dtype=float)
+    
+    for ell in numba.prange(l_max + 1):
+        for idx_nv, nv in enumerate(nv_list):
+            for idx_nq, nq in enumerate(nq_list):
+                lnvq = (ell, nv, nq)
+                ilvq_array[ell, idx_nv, idx_nq] = ilvq_analytic(
+                    lnvq, v_max, q_max, log_wavelet_q, eps_q,
+                    fdm, q0_fdm, v0_fdm,
+                    mass_dm, mass_sm, energy, verbose=verbose
+                )
+    return ilvq_array

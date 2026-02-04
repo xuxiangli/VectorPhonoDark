@@ -1,16 +1,15 @@
 import numpy as np
 import math
 import numba
-import os
 import sys
-import csv
-import h5py
+import os
+import phonopy
 import quaternionic
 from importlib import util
 from functools import reduce
 
 from . import constants as const
-from . import phonopy_funcs
+# from . import phonopy_funcs
 
 
 # Define color codes for terminal output
@@ -22,27 +21,6 @@ else:
     C_GREEN = ""
     C_CYAN = ""
     C_RESET = ""
-
-
-@numba.njit
-def check_cancellation(val1, val2, tag=""):
-    diff = val1 - val2
-    if abs(diff) == 0.0:
-        return
-    
-    max_val = max(abs(val1), abs(val2))
-    if max_val > 1e-20: # avoid checking very small numbers
-        loss_ratio = max_val / abs(diff)
-        
-        if loss_ratio > 1e10:
-            print("!!! Precision Lost Warning !!!")
-            if tag != "":
-                print("Location:", tag)
-            print("Value A:", val1)
-            print("Value B:", val2)
-            print("Diff   :", diff)
-            print("Lost significant digits: > 10")
-            print("-" * 20)
 
 
 def import_file(full_name, path):
@@ -64,75 +42,6 @@ def import_file(full_name, path):
     spec.loader.exec_module(mod)
 
     return mod
-
-
-def writeFnlm_csv(csvsave_name, f_nlm_coeffs={}, info={}, use_gvar=False) -> None:
-    """
-    Write function coefficients to a CSV file.
-
-    Args:
-        csvsave_name:
-            str: The path to the CSV file where coefficients will be saved.
-        f_nlm_coeffs:
-            dict: A dictionary where keys are (n, l, m) tuples and values are function coefficients.
-        basis:
-            dict: A dictionary of basis parameters to include in the CSV header.
-        use_gvar:
-            bool: Whether the function coefficients are gvar objects (default is False).
-    """
-
-    makeHeader = not os.path.exists(csvsave_name)
-    with open(csvsave_name, "a") as csvfile:
-        writer = csv.writer(csvfile, delimiter=",", quoting=csv.QUOTE_MINIMAL)
-        if makeHeader:
-            bparams = [r"#"] + [str(lbl) + ": " + str(prm) for lbl, prm in info.items()]
-            writer.writerow(bparams)
-            header = [r"#n", "l", "m", "f.mean", "f.sdev"]
-            writer.writerow(header)
-        for nlm in f_nlm_coeffs.keys():
-            f = f_nlm_coeffs[nlm]
-            if use_gvar:
-                mean, std = f.mean, f.sdev
-            else:
-                mean, std = f, 0
-            newline = [nlm[0], nlm[1], nlm[2], mean, std]
-            writer.writerow(newline)
-
-
-def write_hdf5(hdf5file, groupname, datasetname="data", data=None, info={}) -> None:
-    """
-    Write data to an HDF5 file.
-
-    Args:
-        hdf5file:
-            str: The path to the HDF5 file.
-        groupname:
-            str: The name of the group in the HDF5 file.
-        datasetname:
-            str: The name of the dataset within the group.
-        data:
-            any: The data to be written to the dataset.
-        info:
-            dict: A dictionary of index names and their corresponding data to be written as separate datasets.
-    """
-
-    with h5py.File(hdf5file, "a") as h5f:
-        if groupname not in h5f:
-            grp = h5f.create_group(groupname)
-        else:
-            grp = h5f[groupname]
-
-        if datasetname in grp:
-            del grp[datasetname]
-
-        if data is not None:
-            grp.create_dataset(datasetname, data=data)
-
-        for info_name, info_data in info.items():
-            if info_name in grp:
-                del grp[info_name]
-
-            grp.create_dataset(info_name, data=info_data)
 
 
 @numba.njit
@@ -200,45 +109,206 @@ def getQ(theta, phi):
     return quaternionic.array(qr, qi, qj, qk)
 
 
-def run_phonopy(phonon_file, k_red) -> list[np.ndarray]:
+# def run_phonopy(phonon_file, k_red) -> list[np.ndarray]:
+#     """
+#     Run phonopy to compute phonon eigenvectors and frequencies at given k-points.
+
+#     Args:
+#         phonon_file:
+#             Phonopy object: The phonopy object containing the phonon data.
+#         k_red:
+#             np.ndarray: An array of shape (N, 3) representing the reduced k-points.
+
+#     Returns:
+#         list[np.ndarray]: A list containing two elements:
+#             - eigenvectors: An array of shape (num_modes, num_atoms, 3) representing the phonon eigenvectors.
+#             - omega: An array of shape (num_modes,) representing the phonon frequencies in eV.
+#     """
+
+#     # run phonopy in mesh mode
+#     phonon_file.run_qpoints(k_red, with_eigenvectors=True)
+
+#     mesh_dict = phonon_file.get_qpoints_dict()
+
+#     eigenvectors_pre = mesh_dict["eigenvectors"]
+
+#     # convert frequencies to correct units
+#     omega = 2 * const.PI * (const.THz_To_eV) * mesh_dict["frequencies"][0]
+
+#     num_atoms = phonon_file.primitive.get_number_of_atoms()
+#     num_modes = 3 * num_atoms
+
+#     # q, nu, i, alpha
+#     eigenvectors = np.zeros((num_modes, num_atoms, 3), dtype=complex)
+
+#     # sort the eigenvectors
+#     for nu in range(num_modes):
+#         eigenvectors[nu][:][:] = np.array(
+#             np.array_split(eigenvectors_pre.T[nu], num_atoms)
+#         ).reshape(num_atoms, 3)
+
+#     return [eigenvectors, omega]
+
+
+def run_phonopy(phonon_file, k_mesh):
     """
-    Run phonopy to compute phonon eigenvectors and frequencies at given k-points.
-
-    Args:
-        phonon_file:
-            Phonopy object: The phonopy object containing the phonon data.
-        k_red:
-            np.ndarray: An array of shape (N, 3) representing the reduced k-points.
-
-    Returns:
-        list[np.ndarray]: A list containing two elements:
-            - eigenvectors: An array of shape (num_modes, num_atoms, 3) representing the phonon eigenvectors.
-            - omega: An array of shape (num_modes,) representing the phonon frequencies in eV.
+        Given a phonon file and k mesh, Returns eigenvectors and frequencies in eV
     """
 
-    # run phonopy in mesh mode
-    phonon_file.run_qpoints(k_red, with_eigenvectors=True)
+    # run phonopy in mesh mode 
+    phonon_file.run_qpoints(k_mesh, with_eigenvectors=True)
+
+    n_k = len(k_mesh)
 
     mesh_dict = phonon_file.get_qpoints_dict()
 
-    eigenvectors_pre = mesh_dict["eigenvectors"]
+    eigenvectors_pre = mesh_dict['eigenvectors']
 
     # convert frequencies to correct units
-    omega = 2 * const.PI * (const.THz_To_eV) * mesh_dict["frequencies"][0]
+    omega = 2*const.PI*(const.THz_To_eV)*mesh_dict['frequencies']
 
-    num_atoms = phonon_file.primitive.get_number_of_atoms()
-    num_modes = 3 * num_atoms
+    num_atoms = len(phonon_file.primitive)
+    num_modes = 3*num_atoms 
 
     # q, nu, i, alpha
-    eigenvectors = np.zeros((num_modes, num_atoms, 3), dtype=complex)
+    eigenvectors = np.zeros((n_k, num_modes, num_atoms, 3), dtype=complex)
 
     # sort the eigenvectors
-    for nu in range(num_modes):
-        eigenvectors[nu][:][:] = np.array(
-            np.array_split(eigenvectors_pre.T[nu], num_atoms)
-        ).reshape(num_atoms, 3)
+    for q in range(n_k):
+        for nu in range(num_modes):
+            eigenvectors[q][nu][:][:] = np.array_split(
+                    eigenvectors_pre[q].T[nu], num_atoms)
 
     return [eigenvectors, omega]
+
+
+def load_phonopy_file(material, io_parameters, supercell, poscar_path, force_sets_path, born_path,
+                        proc_id = 0, root_process = 0):
+
+
+    if os.path.exists(io_parameters['material_data_folder']+material+'/BORN'):
+
+        born_exists = True
+
+    else:
+
+        if proc_id == root_process: 
+
+            print('\tThere is no BORN file for '+material)
+            print()
+
+        born_exists = False
+
+    if born_exists: 
+
+        phonon_file = phonopy.load(
+                            supercell_matrix    = supercell,
+                            primitive_matrix    = 'auto',
+                            unitcell_filename   = poscar_path,
+                            force_sets_filename = force_sets_path,
+                            is_nac              = True,
+                            born_filename       = born_path
+                           )
+
+    else:
+
+        if proc_id == root_process:
+
+            print('\tNo BORN file found for : '+material)
+
+        raise NotImplementedError("Phonopy utility: Loading without BORN file is not implemented.")
+    
+        # phonon_file = phonopy.load(
+        #                     supercell_matrix    = supercell_data[material],
+        #                     primitive_matrix    = 'auto',
+        #                     unitcell_filename   = poscar_path,
+        #                     force_sets_filename = force_sets_path
+        #                    )
+
+    return [phonon_file, born_exists]
+
+
+def get_phonon_file_data(phonon_file, born_exists):
+    """
+        Returns:
+
+            n_atoms - number of atoms in primitive cell
+
+            n_modes - number of modes = 3*n_atoms
+
+            Transformation matrices
+
+            pos_red_to_XYZ - reduced coordinate positions to XYZ
+
+            pos_XYZ_to_red - XYZ coordinates to red
+
+            recip_red_to_XYZ - reduced coordinates to XYZ
+
+            recip_XYZ_to_red - XYZ coordinates to reduced
+
+            eq_positions - equilibrium positions of atoms
+
+            atom_masses - masses of atoms in eV
+
+            A_list - Mass numbers (A)
+
+            Z_list - atomic numbers (Z)
+
+            born - Z_j
+
+            dielectric - high frequency dielectric
+
+    """
+
+    num_atoms = len(phonon_file.primitive)
+    num_modes = 3*num_atoms 
+
+    A_list = phonon_file.primitive.masses
+    Z_list = phonon_file.primitive.numbers
+
+    eq_positions_XYZ = const.Ang_To_inveV*phonon_file.primitive.positions
+
+    atom_masses = const.AMU_To_eV*phonon_file.primitive.masses
+
+    primitive_mat = phonon_file.primitive.cell
+
+    pos_red_to_XYZ = const.Ang_To_inveV*np.transpose(primitive_mat)
+    pos_XYZ_to_red = np.linalg.inv(pos_red_to_XYZ)
+
+    a_vec = np.matmul(pos_red_to_XYZ, [1, 0, 0])
+    b_vec = np.matmul(pos_red_to_XYZ, [0, 1, 0])
+    c_vec = np.matmul(pos_red_to_XYZ, [0, 0, 1])
+
+    recip_lat_a = 2*const.PI*(np.cross(b_vec, c_vec))/(np.matmul(a_vec, np.cross(b_vec, c_vec)))
+    recip_lat_b = 2*const.PI*(np.cross(c_vec, a_vec))/(np.matmul(b_vec, np.cross(c_vec, a_vec)))
+    recip_lat_c = 2*const.PI*(np.cross(a_vec, b_vec))/(np.matmul(c_vec, np.cross(a_vec, b_vec)))
+
+    recip_red_to_XYZ = np.transpose([recip_lat_a, recip_lat_b, recip_lat_c])
+    recip_XYZ_to_red = np.linalg.inv(recip_red_to_XYZ)
+
+    if born_exists:
+
+        born       = phonon_file.nac_params['born']
+        dielectric = phonon_file.nac_params['dielectric']
+
+    else:
+
+        born       = np.zeros((num_atoms, 3, 3))
+        dielectric = np.identity(3)
+
+    return {
+            'num_atoms': num_atoms,
+            'num_modes': num_modes,
+            'pos_red_to_XYZ': pos_red_to_XYZ,
+            'pos_XYZ_to_red': pos_XYZ_to_red,
+            'recip_red_to_XYZ': recip_red_to_XYZ,
+            'recip_XYZ_to_red': recip_XYZ_to_red,
+            'eq_positions_XYZ': eq_positions_XYZ,
+            'atom_masses': atom_masses,
+            'A_list': A_list,
+            'Z_list': Z_list,
+            'born': born,
+            'dielectric': dielectric}
 
 
 @numba.njit
@@ -455,6 +525,6 @@ def get_G_eigenvectors_omega_from_q_xyz(
     k_red_list, G_xyz_list = get_kG_list_from_q_xyz_list(q_xyz_list, recip_red_to_XYZ)
 
     # run phonopy to get polarization vectors and photon energies
-    [ph_eigenvectors, ph_omega] = phonopy_funcs.run_phonopy(phonon_file, k_red_list)
+    [ph_eigenvectors, ph_omega] = run_phonopy(phonon_file, k_red_list)
 
     return G_xyz_list, ph_eigenvectors, ph_omega

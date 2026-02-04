@@ -42,10 +42,10 @@ class Rate:
 
         if vdf.v_max != mcalI.v_max:
             raise ValueError("vdf.v_max and mcalI.v_max do not match.")
-        self.v_max = vdf.v_max
-        if ff.q_max != mcalI.q_max:
-            raise ValueError("ff.q_max and mcalI.q_max do not match.")
-        self.q_max = ff.q_max
+        self.v_max = mcalI.v_max
+        # if ff.q_max != mcalI.q_max:
+        #     raise ValueError("ff.q_max and mcalI.q_max do not match.")
+        self.q_max = mcalI.q_max
 
         # get the minimum l_max and output shape
         vecK_shape = (self.get_lmvmq_index(self.l_max, self.l_max, self.l_max) + 1,)
@@ -154,10 +154,10 @@ class BinnedRate:
 
         if vdf.v_max != binnedmcalI.v_max:
             raise ValueError("vdf.v_max and mcalI.v_max do not match.")
-        self.v_max = vdf.v_max
-        if binnedff.q_max != binnedmcalI.q_max:
-            raise ValueError("ff.q_max and mcalI.q_max do not match.")
-        self.q_max = binnedff.q_max
+        self.v_max = binnedmcalI.v_max
+        # if binnedff.q_max != binnedmcalI.q_max:
+        #     raise ValueError("ff.q_max and mcalI.q_max do not match.")
+        self.q_max = binnedmcalI.q_max
 
         self.n_bins = min(binnedff.n_bins, binnedmcalI.n_bins)
 
