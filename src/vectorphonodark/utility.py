@@ -73,44 +73,44 @@ def sph_to_cart(vec_sph) -> np.ndarray:
     return np.stack((x, y, z), axis=-1)
 
 
-def get_intersection_index(base=None, **lists):
-    """
-    Get the indices of common elements in multiple lists.
+# def get_intersection_index(base=None, **lists):
+#     """
+#     Get the indices of common elements in multiple lists.
 
-    If `base` is provided, it is used as the reference list to find common elements.
-    Otherwise, the first list in `lists` is used as the reference.
+#     If `base` is provided, it is used as the reference list to find common elements.
+#     Otherwise, the first list in `lists` is used as the reference.
 
-    Parameters
-    ----------
-    base : list, optional
-        The base list to compare against.
-    **lists : dict
-        Arbitrary number of lists to find common elements with.
+#     Parameters
+#     ----------
+#     base : list, optional
+#         The base list to compare against.
+#     **lists : dict
+#         Arbitrary number of lists to find common elements with.
 
-    Returns
-    -------
-    np.ndarray
-        Array of indices in each list corresponding to the common elements.
-            shape: (number of lists, number of common elements)
-    """
-    arrays = [np.asarray(l) for l in lists.values()]
-    base_arr = np.asarray(base) if base is not None else np.array([])
-    if base_arr.size > 0:
-        arrays.insert(0, base_arr)
+#     Returns
+#     -------
+#     np.ndarray
+#         Array of indices in each list corresponding to the common elements.
+#             shape: (number of lists, number of common elements)
+#     """
+#     arrays = [np.asarray(l) for l in lists.values()]
+#     base_arr = np.asarray(base) if base is not None else np.array([])
+#     if base_arr.size > 0:
+#         arrays.insert(0, base_arr)
 
-    if not arrays:
-        return np.array([])
+#     if not arrays:
+#         return np.array([])
 
-    common_elements = reduce(np.intersect1d, arrays)
+#     common_elements = reduce(np.intersect1d, arrays)
 
-    if common_elements.size == 0:
-        return np.empty((len(lists), 0), dtype=int)
+#     if common_elements.size == 0:
+#         return np.empty((len(lists), 0), dtype=int)
 
-    target_arrays = [np.asarray(l) for l in lists.values()]
-    indices = np.vstack(
-        [np.searchsorted(arr, common_elements) for arr in target_arrays]
-    )
-    return indices
+#     target_arrays = [np.asarray(l) for l in lists.values()]
+#     indices = np.vstack(
+#         [np.searchsorted(arr, common_elements) for arr in target_arrays]
+#     )
+#     return indices
 
 
 def getQ(theta, phi):
@@ -426,7 +426,7 @@ def proj_integrate_3d(
 
 @numba.njit
 def proj_get_f_nlm(
-    n_list: np.ndarray,
+    n_max: int,
     lm_list: list[tuple[int, int]],
     func_vals: np.ndarray,
     y_lm_vals: dict[tuple[int, int], np.ndarray],
@@ -441,8 +441,8 @@ def proj_get_f_nlm(
 
     Parameters
     ----------
-    n_list : np.ndarray
-        List of radial Haar wavelet orders.
+    n_max : int
+        Maximum radial Haar wavelet order.
     lm_list : list[tuple[int, int]]
         List of (l, m) tuples representing angular quantum numbers.
     func_vals : np.ndarray
@@ -470,8 +470,7 @@ def proj_get_f_nlm(
 
     f_nlm = {}
 
-    for idx_n in numba.prange(len(n_list)):
-        n = n_list[idx_n]
+    for n in numba.prange(n_max + 1):
 
         # Get wavelet values and boundaries
         if log_wavelet:

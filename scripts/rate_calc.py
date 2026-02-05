@@ -4,20 +4,20 @@ import vsdm
 
 from vectorphonodark import constants as const
 from vectorphonodark import utility
-from vectorphonodark.projection import VDF, FormFactor, BinnedMcalI
-from vectorphonodark.rate import BinnedRate
+from vectorphonodark.projection import VDF, FormFactor
+from vectorphonodark.rate import Rate
 
 
 output_path = "/Users/jukcoeng/Desktop/Dark_Matter/Vector Space Integration/VectorPhonoDark/output/"
 
-mass = 10*10**6
+mass = 1*10**6
 f_med = 2
 q0 = mass * const.V0  # reference momentum transfer in eV
 events_per_year = 3.0
 factor = const.RHO_DM
 
-nv_list = list(range(2**7))
-nq_list = list(range(2**7))
+nv_max = 2**7 - 1
+nq_max = 2**7 - 1
 
 l_max = 5
 theta_list = list(range(0, 180, 180))
@@ -32,22 +32,21 @@ physics_params = {
 }
 numerics_params = {
     "l_max": l_max,
-    "nv_list": nv_list,
-    "nq_list": nq_list,
+    "nv_max": nv_max,
+    "nq_max": nq_max,
 }
 
 file_params_vdf = {
     # 'csv': output_path+'vdf/shm_230_240_600_128_180_180_1'+'.csv',
     "hdf5": output_path + "vdf" + ".hdf5",
-    "hdf5_group": "vdf/SHM/230_240_600/(128, 180, 180)",
+    "hdf5_group": "SHM/230_240_600/(128, 180, 180)",
     "hdf5_data": "data",
     "verbose": True,
 }
 file_params_form_factor = {
     # 'csv': output_path+'form_factor/GaAs/test/GaAs_hadrophilic_1MeV_128_25_25'+'.csv',
-    "hdf5": output_path + "mismatch/test" + ".hdf5",
-    # "hdf5_group": f"form_factor/GaAs_hadrophilic/{mass/10**6}MeV/(512, 25, 25)",
-    "hdf5_group": f"form_factor/GaAs_hadrophilic/100.0MeV/(512, 25, 25)",
+    "hdf5": output_path + "form_factor" + ".hdf5",
+    "hdf5_group": f"GaAs_hadrophilic/100.0MeV/(512, 25, 25)",
     "hdf5_data": "data",
     "verbose": True,
 }
@@ -70,11 +69,12 @@ form_factor.import_hdf5(
     verbose=file_params_form_factor["verbose"],
 )
 
-binned_rate = BinnedRate(
+binned_rate = Rate(
     physics_params=physics_params, 
     numerics_params=numerics_params, 
     vdf=vdf, 
-    ff=form_factor
+    ff=form_factor,
+    verbose=True,
 )
 
 for theta in theta_list:
@@ -87,7 +87,8 @@ rate_r = sum(binned_mu_R for binned_mu_R in binned_rate.binned_mu_R(wG=wG).value
 
 for i_rot in range(len(rotationlist)):
     reach = (
-        events_per_year / const.KG_YR / (factor * float(rate_r[i_rot])) * const.inveV_to_cm**2
+        events_per_year / const.KG_YR / (factor * float(rate_r[i_rot])) 
+        * const.inveV_to_cm**2
     )
     print(f"Mass {mass/10**6} MeV, f_med {f_med}, rotation {i_rot}:")
     print(

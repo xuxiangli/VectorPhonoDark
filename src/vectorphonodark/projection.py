@@ -17,24 +17,29 @@ except ImportError:
 
 
 class Fnlm:
-    def __init__(self, l_max=-1, l_mod=1, n_list=None, info=None):
+    def __init__(self, l_max=-1, l_mod=1, n_max=-1, info=None):
+        if l_mod not in [1, 2]:
+            raise ValueError("l_mod must be either 1 (all l) or 2 (even l only).")
+        
         self.l_max = l_max
         self.l_mod = l_mod
-        self.n_list = np.array([]) if n_list is None else np.array(n_list)
+        self.n_max = n_max
         self.info = {} if info is None else info
         
-        self.n_index_map = {val: idx for idx, val in enumerate(self.n_list)}
         self.f_lm_n = np.array([])
 
     def get_lm_index(self, l, m):
         if abs(m) > l or l > self.l_max or l % self.l_mod != 0:
             raise ValueError("Invalid (l, m) values.")
-        return l**2 + l + m
+        if self.l_mod == 2:
+            return l*(l-1)//2 + l + m
+        else:
+            return l**2 + l + m
 
     def get_n_index(self, n):
-        if n not in self.n_index_map:
-            raise ValueError("n value not in n_list.")
-        return self.n_index_map[n]
+        if n > self.n_max:
+            raise ValueError("n value exceeds n_max.")
+        return n
 
     def export_csv(self, filename, write_info=True, verbose=True):
         if not filename.endswith(".csv"):
@@ -51,11 +56,11 @@ class Fnlm:
                     writer.writerow(bparams)
                 header = [r"#n", "l", "m", "f_lm_n"]
                 writer.writerow(header)
-            for l in range(self.l_max + 1):
+            for l in range(0, self.l_max + 1, self.l_mod):
                 for m in range(-l, l + 1):
                     idx_lm = self.get_lm_index(l, m)
-                    for idx_n, n in enumerate(self.n_list):
-                        row = [n, l, m, self.f_lm_n[idx_lm, idx_n]]
+                    for n in range(self.n_max + 1):
+                        row = [n, l, m, self.f_lm_n[idx_lm, n]]
                         writer.writerow(row)
 
         if verbose:
@@ -73,40 +78,30 @@ class Fnlm:
         if not filename.endswith(".csv"):
             filename += ".csv"
         with open(filename, mode="r") as file:
-            # read header and get l_max, n_list, l_mod first
             reader = csv.reader(file, delimiter=",", quoting=csv.QUOTE_MINIMAL)
             data = {}
-            n_list = set()
+            n_max = -1
             l_list = set()
             for row in reader:
                 if row[0].startswith("#"):
                     if len(row) > 1 and ":" in row[1]:
                         for item in row[1:]:
                             key, value = item.split(":", 1)
-                            # if key == "l_max":
-                            #     self.l_max = int(value)
-                            # elif key == "l_mod":
-                            #     self.l_mod = int(value)
-                            # elif key == "n_list":
-                            #     n_items = value.strip("[]").split(",")
-                            #     self.n_list = np.array([int(n) for n in n_items])
-                            # else:
                             self.info[key] = value
                     continue
                 else:
                     n, l, m = int(row[0]), int(row[1]), int(row[2])
                     value = float(row[3])
-                    n_list.add(n)
+                    n_max = max(n_max, n)
                     l_list.add(l)
                     data[(n, l, m)] = value
 
             self.l_max = max(l_list)
             self.l_mod = 2 if all(l % 2 == 0 for l in l_list) else 1
-            self.n_list = np.array(sorted(n_list))
-            self.n_index_map = {val: idx for idx, val in enumerate(self.n_list)}
+            self.n_max = n_max
 
             self.f_lm_n = np.zeros(
-                (self.get_lm_index(self.l_max, self.l_max) + 1, len(self.n_list)),
+                (self.get_lm_index(self.l_max, self.l_max) + 1, self.n_max + 1),
                 dtype=float,
             )
             for (n, l, m), value in data.items():
@@ -129,9 +124,7 @@ class Fnlm:
             dset = grp.create_dataset(dataname, data=self.f_lm_n)
             dset.attrs["l_max"] = self.l_max
             dset.attrs["l_mod"] = self.l_mod
-            if "n_list" in grp:
-                del grp["n_list"]
-            grp.create_dataset("n_list", data=self.n_list)
+            dset.attrs["n_max"] = self.n_max
             if write_info:
                 for key, value in self.info.items():
                     dset.attrs[key] = value
@@ -154,13 +147,12 @@ class Fnlm:
             self.f_lm_n = dset[()]
             self.l_max = dset.attrs["l_max"]
             self.l_mod = dset.attrs["l_mod"]
-            self.n_list = grp["n_list"][()]
+            self.n_max = dset.attrs["n_max"]
             self.info = {
                 key: dset.attrs[key]
                 for key in dset.attrs
-                if key not in ["l_max", "l_mod", "n_list"]
+                if key not in ["l_max", "l_mod", "n_max"]
             }
-            self.n_index_map = {val: idx for idx, val in enumerate(self.n_list)}
 
         if verbose:
             print(
@@ -170,16 +162,19 @@ class Fnlm:
 
 
 class BinnedFnlm:
-    def __init__(self, n_bins=0, l_max=-1, l_mod=1, n_list=None, info=None):
+    def __init__(self, n_bins=0, l_max=-1, l_mod=1, n_max=-1, info=None):
+        if l_mod not in [1, 2]:
+            raise ValueError("l_mod must be either 1 (all l) or 2 (even l only).")
+        
         self.n_bins = n_bins
         self.l_max = l_max
         self.l_mod = l_mod
-        self.n_list = np.array([]) if n_list is None else np.array(n_list)
+        self.n_max = n_max
         self.info = {} if info is None else info
 
         self.fnlms = {}
 
-    def check_consistency(self):
+    def _check_consistency(self):
         l_max_list = [fnlm.l_max for fnlm in self.fnlms.values()]
         if not all(l_max == self.l_max for l_max in l_max_list):
             raise ValueError("Inconsistent l_max among bins.")
@@ -188,9 +183,9 @@ class BinnedFnlm:
         if not all(l_mod == self.l_mod for l_mod in l_mod_list):
             raise ValueError("Inconsistent l_mod among bins.")
         
-        n_list_list = [fnlm.n_list for fnlm in self.fnlms.values()]
-        if not all(np.array_equal(n_list, self.n_list) for n_list in n_list_list):
-            raise ValueError("Inconsistent n_list among bins.")
+        n_max_list = [fnlm.n_max for fnlm in self.fnlms.values()]
+        if not all(n_max == self.n_max for n_max in n_max_list):
+            raise ValueError("Inconsistent n_max among bins.")
         
     def export_csv(self, filename, write_info=True, verbose=True):
         if filename.endswith(".csv"):
@@ -229,8 +224,8 @@ class BinnedFnlm:
 
         self.l_max = self.fnlms[0].l_max
         self.l_mod = self.fnlms[0].l_mod
-        self.n_list = self.fnlms[0].n_list
-        self.check_consistency()
+        self.n_max = self.fnlms[0].n_max
+        self._check_consistency()
 
         if verbose:
             print(
@@ -246,9 +241,8 @@ class BinnedFnlm:
             grp = h5f.require_group(groupname)
             grp.attrs["n_bins"] = self.n_bins
             grp.attrs["l_max"] = self.l_max
-            if "n_list" in grp:
-                del grp["n_list"]
-            grp.create_dataset("n_list", data=self.n_list)
+            grp.attrs["l_mod"] = self.l_mod
+            grp.attrs["n_max"] = self.n_max
             for key, value in self.info.items():
                 grp.attrs[key] = value
             for idx_bin, fnlm in self.fnlms.items():
@@ -274,12 +268,12 @@ class BinnedFnlm:
             grp = h5f[groupname]
             self.n_bins = grp.attrs["n_bins"]
             self.l_max = grp.attrs["l_max"]
-            self.n_list = grp["n_list"][()]
-            # self.n_list = grp.attrs["n_list"]
+            self.l_mod = grp.attrs["l_mod"]
+            self.n_max = grp.attrs["n_max"]
             self.info = {
                 key: grp.attrs[key]
                 for key in grp.attrs
-                if key not in ["n_bins", "l_max", "n_list"]
+                if key not in ["n_bins", "l_max", "l_mod", "n_max"]
             }
             self.fnlms = {}
             for idx_bin in range(self.n_bins):
@@ -290,7 +284,7 @@ class BinnedFnlm:
                 )
                 self.fnlms[idx_bin] = fnlm
         
-        self.check_consistency()
+        self._check_consistency()
 
         if verbose:
             print(
@@ -322,8 +316,8 @@ class VDF(Fnlm):
     def __init__(self, physics_params, numerics_params):
         l_max = numerics_params.get("l_max", -1)
         l_mod = numerics_params.get("l_mod", 1)
-        n_list = numerics_params.get("n_list", np.array([]))
-        super().__init__(l_max=l_max, l_mod=l_mod, n_list=n_list)
+        n_max = numerics_params.get("n_max", -1)
+        super().__init__(l_max=l_max, l_mod=l_mod, n_max=n_max)
 
         self.vdf = physics_params.get("vdf", None)
         self.vdf_params = physics_params.get("vdf_params", {})
@@ -343,7 +337,7 @@ class VDF(Fnlm):
         keys_to_load = [
             # "l_max",
             # "l_mod",
-            # "n_list",
+            # "n_max",
             "v_max"
         ]
         for key in keys_to_load:
@@ -357,7 +351,7 @@ class VDF(Fnlm):
         keys_to_load = [
             # "l_max",
             # "l_mod",
-            # "n_list",
+            # "n_max",
             "v_max"
         ]
         for key in keys_to_load:
@@ -376,7 +370,8 @@ class VDF(Fnlm):
             start_total_time = time.time()
 
         l_max = self.l_max
-        n_list = self.n_list
+        l_mod = self.l_mod
+        n_max = self.n_max
 
         vdf = self.vdf
         vdf_params = self.vdf_params
@@ -390,14 +385,14 @@ class VDF(Fnlm):
                 print(f"    Using VDF model: {self.info['model']}")
             print(f"    Parameters for VDF: {vdf_params}")
             print(f"    Reference velocity v_max = {v_max:.2e}.")
-            print(f"    Projecting onto basis with l_max={l_max}, n_max={max(n_list)}.")
+            print(f"    Projecting onto basis with l_max={l_max}, l_mod={l_mod}, n_max={n_max}.")
             print(f"    Grid size: n_a={n_a}, n_b={n_b}, n_c={n_c}")
             # print(f"    Grid rescaled: power_a={p_a}, power_b={p_b}, power_c={p_c}")
             print("\n    Generate grids and calculating form factor...")
             start_time = time.time()
 
         # Prepare grid points and function values
-        lm_list = [(l, m) for l in range(l_max + 1) for m in range(-l, l + 1)]
+        lm_list = [(l, m) for l in range(0, l_max + 1, l_mod) for m in range(-l, l + 1)]
         v_xyz_list, y_lm_vals, jacob_vals = utility.gen_mesh_ylm_jacob(
             lm_list, v_max, n_a, n_b, n_c  # , p_a, p_b, p_c
         )
@@ -415,7 +410,7 @@ class VDF(Fnlm):
 
         # Project vdf onto basis functions
         f_nlm = utility.proj_get_f_nlm(
-            n_list=n_list, lm_list=lm_list,
+            n_max=n_max, lm_list=lm_list,
             func_vals=vdf_vals, y_lm_vals=y_lm_vals, jacob_vals=jacob_vals,
             n_a=n_a, # p_a,
         )
@@ -423,13 +418,13 @@ class VDF(Fnlm):
 
         # Store results
         self.f_lm_n = np.zeros(
-            (self.get_lm_index(l_max, l_max) + 1, len(n_list)), dtype=float
+            (self.get_lm_index(l_max, l_max) + 1, n_max + 1), dtype=float
         )
-        for l in range(l_max + 1):
+        for l in range(0, l_max + 1, l_mod):
             for m in range(-l, l + 1):
                 idx_lm = self.get_lm_index(l, m)
-                for idx_n, n in enumerate(n_list):
-                    self.f_lm_n[idx_lm, idx_n] = f_nlm.get((n, l, m), 0.0)
+                for n in range(n_max + 1):
+                    self.f_lm_n[idx_lm, n] = f_nlm.get((n, l, m), 0.0)
 
         if verbose:
             print("    Projection completed.")
@@ -463,8 +458,8 @@ class FormFactor(BinnedFnlm):
     def __init__(self, physics_params, numerics_params):
         l_max = numerics_params.get("l_max", -1)
         l_mod = numerics_params.get("l_mod", 1)
-        n_list = numerics_params.get("n_list", np.array([]))
-        super().__init__(n_bins=0, l_max=l_max, l_mod=l_mod, n_list=n_list)
+        n_max = numerics_params.get("n_max", -1)
+        super().__init__(n_bins=0, l_max=l_max, l_mod=l_mod, n_max=n_max)
 
         self.energy_threshold = physics_params.get("energy_threshold", 0.0)
         self.energy_bin_width = physics_params.get("energy_bin_width", 0.0)
@@ -490,7 +485,7 @@ class FormFactor(BinnedFnlm):
             # "n_bins",
             # "l_max",
             # "l_mod",
-            # "n_list",
+            # "n_max",
             "q_max",
             "energy_threshold",
             "energy_bin_width",
@@ -515,7 +510,7 @@ class FormFactor(BinnedFnlm):
             # "n_bins",
             # "l_max",
             # "l_mod",
-            # "n_list",
+            # "n_max",
             "q_max",
             "energy_threshold",
             "energy_bin_width",
@@ -546,7 +541,8 @@ class FormFactor(BinnedFnlm):
         )
 
         l_max = self.l_max
-        n_list = self.n_list
+        l_mod = self.l_mod
+        n_max = self.n_max
 
         energy_threshold = self.energy_threshold
         energy_bin_width = self.energy_bin_width
@@ -580,7 +576,7 @@ class FormFactor(BinnedFnlm):
             else:
                 print(f"    Standard (power) wavelet basis in q.")
             print(f"    Reference momentum q_max = {q_max:.2e} eV.")
-            print(f"    Projecting onto basis with l_max={l_max}, n_max={max(n_list)}.")
+            print(f"    Projecting onto basis with l_max={l_max}, l_mod={l_mod}, n_max={n_max}.")
             print(f"    Grid size: n_a={n_a}, n_b={n_b}, n_c={n_c}")
             # print(f"    Grid rescaled: power_a={p_a}, power_b={p_b}, power_c={p_c}")
             print(f"    Energy bins: {energy_bin_num} bins from "
@@ -590,7 +586,7 @@ class FormFactor(BinnedFnlm):
             start_time = time.time()
 
         # Prepare grid points and basis function values
-        lm_list = [(l, m) for l in range(l_max + 1) for m in range(-l, l + 1)]
+        lm_list = [(l, m) for l in range(0, l_max + 1, l_mod) for m in range(-l, l + 1)]
         if log_wavelet:
             q_min = energy_threshold / (const.VESC + const.VE)
             eps = q_min / q_max
@@ -627,7 +623,7 @@ class FormFactor(BinnedFnlm):
         for i_bin in range(energy_bin_num):
 
             self.fnlms[i_bin] = Fnlm(
-                l_max=l_max, l_mod=self.l_mod, n_list=n_list, info=self.info
+                l_max=l_max, l_mod=self.l_mod, n_max=n_max, info=self.info
             )
 
             if verbose:
@@ -635,7 +631,7 @@ class FormFactor(BinnedFnlm):
                     print(f"      Projecting energy bin {i_bin}/{energy_bin_num-1}...")
 
             f_nlm = utility.proj_get_f_nlm(
-                n_list=n_list, lm_list=lm_list,
+                n_max=n_max, lm_list=lm_list,
                 func_vals=form_factor_bin_vals[i_bin, :, :, :], 
                 y_lm_vals=y_lm_vals, jacob_vals=jacob_vals,
                 n_a=n_a, # p_a,
@@ -643,14 +639,14 @@ class FormFactor(BinnedFnlm):
             )
 
             self.fnlms[i_bin].f_lm_n = np.zeros(
-                (self.fnlms[i_bin].get_lm_index(l_max, l_max)+1, len(n_list),),
+                (self.fnlms[i_bin].get_lm_index(l_max, l_max)+1, n_max + 1,),
                 dtype=float,
             )
-            for l in range(l_max + 1):
+            for l in range(0, l_max + 1, l_mod):
                 for m in range(-l, l + 1):
                     idx_lm = self.fnlms[i_bin].get_lm_index(l, m)
-                    for idx_n, n in enumerate(n_list):
-                        self.fnlms[i_bin].f_lm_n[idx_lm, idx_n] = (
+                    for n in range(n_max + 1):
+                        self.fnlms[i_bin].f_lm_n[idx_lm, n] = (
                             f_nlm.get((n, l, m), 0.0)
                         )
 
@@ -690,8 +686,8 @@ class McalI:
     def __init__(self, physics_params, numerics_params):
         self.l_max = numerics_params.get("l_max", -1)
         self.l_mod = numerics_params.get("l_mod", 1)
-        self.nv_list = numerics_params.get("nv_list", np.array([]))
-        self.nq_list = numerics_params.get("nq_list", np.array([]))
+        self.nv_max = numerics_params.get("nv_max", -1)
+        self.nq_max = numerics_params.get("nq_max", -1)
         self.v_max = numerics_params.get("v_max", 1.0)
         self.q_max = numerics_params.get("q_max", 1.0)
 
@@ -703,11 +699,15 @@ class McalI:
 
         self.log_wavelet_q = numerics_params.get("log_wavelet_q", False)
         self.eps_q = numerics_params.get("eps_q", 1.0)
+
+        if self.l_mod not in [1, 2]:
+            raise ValueError("l_mod must be either 1 (all l) or 2 (even l only).")
+
         if self.log_wavelet_q and (self.eps_q <= 0.0 or self.eps_q > 1.0):
             raise ValueError("eps_q must be in (0, 1) for log wavelet basis in q.")
 
         self.mcalI = np.zeros(
-            (self.l_max + 1, len(self.nv_list), len(self.nq_list)), dtype=float
+            (self.l_max//self.l_mod + 1, self.nv_max + 1, self.nq_max + 1), dtype=float
         )
         self.info = {}
 
@@ -727,19 +727,13 @@ class McalI:
             if write_info:
                 dset.attrs["l_max"] = self.l_max
                 dset.attrs["l_mod"] = self.l_mod
-                if "nv_list" in grp:
-                    del grp["nv_list"]
-                grp.create_dataset("nv_list", data=self.nv_list)
-                if "nq_list" in grp:
-                    del grp["nq_list"]
-                grp.create_dataset("nq_list", data=self.nq_list)
-
+                dset.attrs["nv_max"] = self.nv_max
+                dset.attrs["nq_max"] = self.nq_max
                 dset.attrs["v_max"] = self.v_max
                 dset.attrs["q_max"] = self.q_max
 
                 dset.attrs["fdm"] = self.fdm
                 dset.attrs["q0_fdm"] = self.q0_fdm
-
                 dset.attrs["energy"] = self.energy
                 dset.attrs["mass_dm"] = self.mass_dm
                 dset.attrs["mass_sm"] = self.mass_sm
@@ -762,18 +756,15 @@ class McalI:
             dset = grp[dataname]
             self.mcalI = dset[()]
 
-            self.nv_list = grp["nv_list"][()]
-            self.nq_list = grp["nq_list"][()]
-
             keys_to_load = [
                 "l_max",
-                # "l_mod",
-                # "nv_list",
-                # "nq_list",
+                "l_mod",
+                "nv_max",
+                "nq_max",
                 "v_max",
                 "q_max",
                 "fdm",
-                # "q0_fdm",
+                "q0_fdm",
                 "energy",
                 "mass_dm",
                 "mass_sm",
@@ -802,8 +793,9 @@ class McalI:
             start_time = time.time()
 
         l_max = self.l_max
-        nv_list = self.nv_list
-        nq_list = self.nq_list
+        l_mod = self.l_mod
+        nv_max = self.nv_max
+        nq_max = self.nq_max
         v_max = self.v_max
         q_max = self.q_max
         fdm = self.fdm
@@ -824,16 +816,16 @@ class McalI:
                 print(f"    Standard (power) wavelet basis in q.")
             print(f"    Reference velocity v_max = {v_max:.2e}.")
             print(f"    Reference momentum q_max = {q_max:.2e} eV.")
-            print(f"    Projecting onto basis with l_max={l_max}, nv_max={max(nv_list)}, nq_max={max(nq_list)}.")
+            print(f"    Projecting onto basis with l_max={l_max}, l_mod={l_mod}, nv_max={nv_max}, nq_max={nq_max}.")
 
             print("\n    Calculating McalI matrix coefficients...")
 
         # Projection
-        # for l in range(l_max + 1):
+        # for l in range(0, l_max + 1, l_mod):
         #     for idx_nv, nv in enumerate(nv_list):
         #         for idx_nq, nq in enumerate(nq_list):
         #             self.mcalI[l, idx_nv, idx_nq] = self.getI_lvq_analytic((l, nv, nq))
-        self.mcalI = self.get_mcalI(l_max, nv_list, nq_list)
+        self.mcalI = self.get_mcalI(l_max, l_mod, nv_max, nq_max)
 
         if verbose:
             print("    Projection completed.")
@@ -875,11 +867,12 @@ class McalI:
 
         return Ilvq
 
-    def get_mcalI(self, l_max, nv_list, nq_list):
+    def get_mcalI(self, l_max, l_mod, nv_max, nq_max):
 
-        l_max = self.l_max
-        nv_list = self.nv_list
-        nq_list = self.nq_list
+        # l_max = self.l_max
+        # l_mod = self.l_mod
+        # nv_max = self.nv_max
+        # nq_max = self.nq_max
         v_max = self.v_max
         q_max = self.q_max
         fdm = self.fdm
@@ -892,7 +885,7 @@ class McalI:
         eps_q = self.eps_q
 
         return analytic.ilvq(
-            l_max, np.array(nv_list, dtype=int), np.array(nq_list, dtype=int), 
+            l_max, l_mod, nv_max, nq_max,
             v_max, q_max, log_wavelet_q, eps_q,
             fdm, q0_fdm, v0_fdm, 
             mass_dm, mass_sm, energy
@@ -930,8 +923,8 @@ class BinnedMcalI:
     def __init__(self, physics_params, numerics_params):
         self.l_max = numerics_params.get("l_max", -1)
         self.l_mod = numerics_params.get("l_mod", 1)
-        self.nv_list = numerics_params.get("nv_list", np.array([]))
-        self.nq_list = numerics_params.get("nq_list", [])
+        self.nv_max = numerics_params.get("nv_max", -1)
+        self.nq_max = numerics_params.get("nq_max", -1)
         self.v_max = numerics_params.get("v_max", 1.0)
         self.q_max = numerics_params.get("q_max", 1.0)
 
@@ -945,22 +938,26 @@ class BinnedMcalI:
 
         self.log_wavelet_q = numerics_params.get("log_wavelet_q", False)
         self.eps_q = numerics_params.get("eps_q", 1.0)
+
+        if self.l_mod not in [1, 2]:
+            raise ValueError("l_mod must be either 1 (all l) or 2 (even l only).")
+
         if self.log_wavelet_q and (self.eps_q <= 0.0 or self.eps_q > 1.0):
             raise ValueError("eps_q must be in (0, 1) for log wavelet basis in q.")
 
         self.mcalIs = {}  # to be filled after projection
         self.info = {}
     
-    def check_consistency(self):
+    def _check_consistency(self):
         for idx_bin, mcalI in self.mcalIs.items():
             if mcalI.l_max != self.l_max:
                 raise ValueError(f"Inconsistent l_max in bin {idx_bin}.")
             if mcalI.l_mod != self.l_mod:
                 raise ValueError(f"Inconsistent l_mod in bin {idx_bin}.")
-            if not np.array_equal(mcalI.nv_list, self.nv_list):
-                raise ValueError(f"Inconsistent nv_list in bin {idx_bin}.")
-            if not np.array_equal(mcalI.nq_list, self.nq_list):
-                raise ValueError(f"Inconsistent nq_list in bin {idx_bin}.")
+            if mcalI.nv_max != self.nv_max:
+                raise ValueError(f"Inconsistent nv_max in bin {idx_bin}.")
+            if mcalI.nq_max != self.nq_max:
+                raise ValueError(f"Inconsistent nq_max in bin {idx_bin}.")
             if mcalI.v_max != self.v_max:
                 raise ValueError(f"Inconsistent v_max in bin {idx_bin}.")
             if mcalI.q_max != self.q_max:
@@ -990,13 +987,8 @@ class BinnedMcalI:
             grp.attrs["n_bins"] = self.n_bins
             grp.attrs["l_max"] = self.l_max
             grp.attrs["l_mod"] = self.l_mod
-            if "nv_list" in grp:
-                del grp["nv_list"]
-            grp.create_dataset("nv_list", data=self.nv_list)
-            if "nq_list" in grp:
-                del grp["nq_list"]
-            grp.create_dataset("nq_list", data=self.nq_list)
-
+            grp.attrs["nv_max"] = self.nv_max
+            grp.attrs["nq_max"] = self.nq_max
             grp.attrs["v_max"] = self.v_max
             grp.attrs["q_max"] = self.q_max
 
@@ -1036,19 +1028,16 @@ class BinnedMcalI:
         with h5py.File(filename, "r") as h5f:
             grp = h5f[groupname]
 
-            self.nv_list = grp["nv_list"][()]
-            self.nq_list = grp["nq_list"][()]
-
             keys_to_load = [
                 "n_bins",
                 "l_max",
-                # "l_mod",
-                # "nv_list",
-                # "nq_list",
+                "l_mod",
+                "nv_max",
+                "nq_max",
                 "v_max",
                 "q_max",
                 "fdm",
-                # "q0_fdm",
+                "q0_fdm",
                 "energy_threshold",
                 "energy_bin_width",
                 "mass_dm",
@@ -1075,7 +1064,7 @@ class BinnedMcalI:
                 )
                 self.mcalIs[idx_bin] = mcalI
 
-        self.check_consistency()
+        self._check_consistency()
 
         if verbose:
             print(
@@ -1098,8 +1087,8 @@ class BinnedMcalI:
         numerics_params_keys = [
             "l_max",
             "l_mod",
-            "nv_list",
-            "nq_list",
+            "nv_max",
+            "nq_max",
             "v_max",
             "q_max",
             "log_wavelet_q",
@@ -1124,7 +1113,7 @@ class BinnedMcalI:
                 print(f"    Standard (linear) wavelet basis in q.")
             print(f"    Reference velocity v_max = {self.v_max:.2e}.")
             print(f"    Reference momentum q_max = {self.q_max:.2e} eV.")
-            print(f"    Projecting onto basis with l_max={self.l_max}, nv_max={max(self.nv_list)}, nq_max={max(self.nq_list)}.")
+            print(f"    Projecting onto basis with l_max={self.l_max}, nv_max={self.nv_max}, nq_max={self.nq_max}.")
 
             print("\n    Calculating McalI matrix coefficients...")
 

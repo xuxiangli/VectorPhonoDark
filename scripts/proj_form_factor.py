@@ -1,12 +1,10 @@
 from vectorphonodark import constants as const
 from vectorphonodark.projection import FormFactor
 
-input_path = (
-    "/Users/jukcoeng/Desktop/Dark_Matter/Vector Space Integration/VectorPhonoDark/"
-)
+input_path = "/Users/jukcoeng/Desktop/Dark_Matter/Vector Space Integration/VectorPhonoDark/"
 output_path = "/Users/jukcoeng/Desktop/Dark_Matter/Vector Space Integration/VectorPhonoDark/output/"
 
-mass = 10**6  # in eV
+mass = 100*10**6  # in eV
 
 physics_params = {
     "energy_threshold": 1e-3,  # eV
@@ -20,11 +18,11 @@ numerics_params = {
     # reference momentum scale in eV
     "q_max": 2 * mass * (const.VESC + const.VE),
     "l_max": 5,
-    "n_list": (list(range(2**7))),
-    "n_grid": (2**7, 25, 25),
+    "n_max": 2**9 - 1,
+    "n_grid": (2**9, 25, 25),
     "log_wavelet": True,
     # whether to compute q_cut from Debye-Waller factor
-    "q_cut": False,
+    "q_cut": True,
 }
 input_params = {
     "material_input": input_path + "inputs/material/GaAs/GaAs.py",
@@ -35,8 +33,8 @@ file_params = {
     # "csv": output_path
     # + f'form_factor/Al2O3/test/{physics_params["model"]}_{mass/10**6}MeV_{numerics_params["n_grid"]}'
     # + ".csv",
-    "hdf5": output_path + "form_factor_2" + ".hdf5",
-    "hdf5_group": f'form_factor/{physics_params["model"]}/{mass/10**6}MeV/{numerics_params["n_grid"]}_log',
+    "hdf5": output_path + "form_factor" + ".hdf5",
+    "hdf5_group": f'{physics_params["model"]}/{mass/10**6}MeV/{numerics_params["n_grid"]}',
     "hdf5_data": "data",
 }
 params = {**physics_params, **numerics_params, **input_params}

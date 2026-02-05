@@ -380,21 +380,23 @@ def ilvq_analytic(lnvq, v_max, q_max, log_wavelet_q, eps_q,
 
 
 @numba.njit(parallel=True)
-def ilvq(l_max, nv_list, nq_list, 
+def ilvq(l_max, l_mod, nv_max, nq_max, 
          v_max, q_max, log_wavelet_q, eps_q, 
          fdm, q0_fdm, v0_fdm,
          mass_dm, mass_sm, energy, verbose=False):
     """
-    Compute I_l(nv,nq) for all l in [0,l_max], nv in nv_list, nq in nq_list.
+    Compute I_l(nv,nq) for all l in [0,l_max], nv in [0,nv_max], nq in [0,nq_max].
 
     Parameters
     ----------
     l_max : int
         Maximum l value.
-    nv_list : list[int]
-        List of nv indices.
-    nq_list : list[int]
-        List of nq indices.
+    l_mod : int
+        Modulo for l values to compute (e.g. l_mod=2 computes only even l).
+    nv_max : int
+        Maximum nv index.
+    nq_max : int
+        Maximum nq index.
     v_max : float
         Maximum velocity.
     q_max : float
@@ -422,17 +424,17 @@ def ilvq(l_max, nv_list, nq_list,
     Returns
     -------
     ilvq_array : np.ndarray
-        Array of shape (l_max+1, len(nv_list), len(nq_list)) containing I_l(nv,nq) values.
+        Array of shape (l_max//l_mod + 1, nv_max + 1, nq_max + 1) containing I_l(nv,nq) values.
     """
     
-    shape = (l_max + 1, len(nv_list), len(nq_list))
+    shape = (l_max//l_mod + 1, nv_max + 1, nq_max + 1)
     ilvq_array = np.zeros(shape, dtype=float)
     
-    for ell in numba.prange(l_max + 1):
-        for idx_nv, nv in enumerate(nv_list):
-            for idx_nq, nq in enumerate(nq_list):
+    for ell in numba.prange(0, l_max + 1, l_mod):
+        for nv in range(nv_max + 1):
+            for nq in range(nq_max + 1):
                 lnvq = (ell, nv, nq)
-                ilvq_array[ell, idx_nv, idx_nq] = ilvq_analytic(
+                ilvq_array[ell//l_mod, nv, nq] = ilvq_analytic(
                     lnvq, v_max, q_max, log_wavelet_q, eps_q,
                     fdm, q0_fdm, v0_fdm,
                     mass_dm, mass_sm, energy, verbose=verbose
