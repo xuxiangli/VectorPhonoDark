@@ -1,19 +1,21 @@
 import math
-import numpy as np
 import numba
 
 
 @numba.njit
-def haar_n_to_lam_mu(n) -> tuple[int, int]:
+def haar_n_to_lam_mu(n: int) -> tuple[int, int]:
     """
     Convert Haar wavelet order n to (lambda, mu) pair.
 
-    Args:
-        n: 
-            int: The order of the Haar wavelet.
+    Parameters
+    ----------
+    n : int
+        The order of the Haar wavelet. Must be non-negative.
 
-    Returns:
-        tuple[int, int]: (lambda, mu) pair representing the scale and index.
+    Returns
+    -------
+    output : tuple[int, int]
+        (lambda, mu) pair representing the scale and index.
     """
     assert n >= 0, "Haar wavelet: Order must be non-negative."
     if n == 0:
@@ -28,17 +30,21 @@ def haar_lam_mu_to_n(lam: int, mu: int) -> int:
     """
     Convert (lambda, mu) pair to Haar wavelet order n.
 
-    Args:
-        lam: 
-            int: The scale of the Haar wavelet.
-        mu: 
-            int: The index of the Haar wavelet.
-    Returns:
-        int: The order of the Haar wavelet.
+    Parameters
+    ----------
+    lam : int
+        The scale of the Haar wavelet.
+    mu : int
+        The index of the Haar wavelet.
+
+    Returns
+    -------
+    output : int
+        The order of the Haar wavelet.
     """
     assert lam >= 0 and mu >= 0, "Haar wavelet: Scale and index must be non-negative."
     assert mu < (1 << lam), "Haar wavelet: Index mu must be less than 2^lambda."
-    # n = 0 case, just for completeness
+    # n = 0 case, for completeness
     if lam == -1 and mu == -1:
         return 0
     n = (1 << lam) + mu
@@ -46,16 +52,19 @@ def haar_lam_mu_to_n(lam: int, mu: int) -> int:
 
 
 @numba.njit
-def haar_support(n) -> list[float]:
+def haar_support(n: int) -> list[float]:
     """
-    Compute the support of the Haar wavelet basis functions of order n.
+    Compute the support of the Haar wavelet function of order n.
 
-    Args:
-        n: 
-            int: The order of the Haar wavelet.
+    Parameters
+    ----------
+    n : int
+        The order of the Haar wavelet.
 
-    Returns:
-        list[float]: The support indices of the Haar wavelet basis functions.
+    Returns
+    -------
+    output : list[float]
+        The support region [x_min, x_mid, x_max] of the Haar wavelet function.
     """
     if n == 0:
         return [0., 1., 1.]
@@ -71,16 +80,19 @@ def haar_support(n) -> list[float]:
 @numba.njit
 def haar_support_log(n: int, eps: float) -> list[float]:
     """
-    Compute the support of the log Haar wavelet basis functions of order n.
+    Compute the support of the log Haar wavelet function of order n.
 
-    Args:
-        n: 
-            int: The order of the Haar wavelet.
-        eps:
-            float: The lower bound for the integral
+    Parameters
+    ----------
+    n : int
+        The order of the Haar wavelet.
+    eps : float
+        The lower bound of the integral.
 
-    Returns:
-        list[float]: The support indices of the log Haar wavelet basis functions.
+    Returns
+    -------
+    output : list[float]
+        The support region [x_min, x_mid, x_max] of the log Haar wavelet function.
     """
     assert eps > 0.0 and eps < 1.0, "Log Haar wavelet: eps must be in (0, 1)."
     
@@ -98,18 +110,21 @@ def haar_support_log(n: int, eps: float) -> list[float]:
 
 
 @numba.njit
-def haar_value(n, dim: int=3) -> list[float]:
+def haar_value(n: int, dim: int=3) -> list[float]:
     """
-    Compute the values of the Haar wavelet basis functions at their support points.
+    Compute the values of the Haar wavelet function.
 
-    Args:
-        n: 
-            int: The order of the Haar wavelet.
-        dim: 
-            int: The dimension of the spherical haar wavelet (default is 3).
+    Parameters
+    ----------
+    n : int
+        The order of the Haar wavelet.
+    dim : int
+        The dimension of the spherical haar wavelet (default is 3).
 
-    Returns:
-        list[float]: The values of the Haar wavelet basis functions at their support points.
+    Returns
+    -------
+    output : list[float]
+        The values of the Haar wavelet [a_n, -b_n].
     """
     if n == 0:
         return [math.sqrt(dim)] * 2
@@ -128,20 +143,23 @@ def haar_value(n, dim: int=3) -> list[float]:
 
 
 @numba.njit
-def haar_value_log(n, eps: float, p: int=2) -> list[float]:
+def haar_value_log(n: int, eps: float, p: int=2) -> list[float]:
     """
-    Compute the values of the log Haar wavelet basis functions at their support points.
+    Compute the values of the log Haar wavelet function.
 
-    Args:
-        n: 
-            int: The order of the Haar wavelet.
-        eps:
-            float: The lower bound for the integral
-        p: 
-            int: The weight in orthornormality condition (default is 2).
+    Parameters
+    ----------
+    n : int
+        The order of the Haar wavelet.
+    eps : float
+        The lower bound of the integral.
+    p : int
+            The weight in orthornormality condition (default is 2).
 
-    Returns:
-        list[float]: The values of the log Haar wavelet basis functions at their support points.
+    Returns
+    -------
+    output : list[float]
+        The values of the log Haar wavelet [a_n, -b_n].
     """
     assert eps > 0.0 and eps < 1.0, "Log Haar wavelet: eps must be in (0, 1)."
 
@@ -154,7 +172,7 @@ def haar_value_log(n, eps: float, p: int=2) -> list[float]:
             case _:
                 return [math.sqrt((p + 1.)/(1. - math.pow(eps, p + 1.)))] * 2
 
-    lam, mu = haar_n_to_lam_mu(n)
+    lam, _ = haar_n_to_lam_mu(n)
             
     length = math.log(1. / eps)
     x1, _, _ = haar_support_log(n, eps)
@@ -177,30 +195,25 @@ def haar_value_log(n, eps: float, p: int=2) -> list[float]:
     return [a_n, -b_n]
 
 
-
-def haar_func(n, x: float, dim: int=3) -> float:
+@numba.njit
+def haar_func(n: int, x: float, dim: int=3) -> float:
     """
-    Evaluate the Haar wavelet basis function at a given point.
+    Evaluate the Haar wavelet basis function at the given point.
 
-    Args:
-        n: 
-            int: The order of the Haar wavelet.
-        x: 
-            float: The point at which to evaluate the Haar wavelet.
-        dim: 
-            int: The dimension of the spherical haar wavelet (default is 3).
+    Parameters
+    ----------
+    n : int
+        The order of the Haar wavelet.
+    x : float
+            The point at which to evaluate the Haar wavelet.
+    dim : int
+        The dimension of the spherical haar wavelet (default is 3).
 
-    Returns:
-        float: The value of the Haar wavelet basis function at point x.
+    Returns
+    -------
+    output : float
+        The value of the Haar wavelet basis function at point x.
     """
-    if isinstance(n, tuple):
-        assert len(n) == 2, "Haar wavelet: Input tuple must be of length 2."
-        lam, mu = n
-        assert lam >= 0 and mu >= 0, "Haar wavelet: Scale and index must be non-negative."
-    elif isinstance(n, int):
-        lam, mu = haar_n_to_lam_mu(n)
-    else:
-        raise TypeError("Haar wavelet: Input must be an integer or a tuple of two integers.")
 
     if n == 0:
         if 0 <= x <= 1:
@@ -225,26 +238,27 @@ def haar_func(n, x: float, dim: int=3) -> float:
     
 
 @numba.njit
-def haar_func_log(n, x: float, eps: float, p: int=0) -> float:
+def haar_func_log(n: int, x: float, eps: float, p: int=0) -> float:
     """
-    Evaluate the log Haar wavelet basis function at a given point.
+    Evaluate the log Haar wavelet basis function at the given point.
 
-    Args:
-        n: 
-            int: The order of the Haar wavelet.
-        x: 
-            float: The point at which to evaluate the log Haar wavelet.
-        eps:
-            float: The lower bound for the integral
-        p: 
-            int: The weight in orthornormality condition (default is 0).
+    Parameters
+    ----------
+    n : int
+        The order of the Haar wavelet.
+    x : float
+        The point at which to evaluate the log Haar wavelet.
+    eps : float
+        The lower bound of the integral.
+    p : int
+        The weight in orthornormality condition (default is 0).
 
-    Returns:
-        float: The value of the log Haar wavelet basis function at point x.
+    Returns
+    -------
+    output : float
+        The value of the log Haar wavelet basis function at point x.
     """
     assert eps > 0.0 and eps < 1.0, "Log Haar wavelet: eps must be in (0, 1)."
-
-    lam, mu = haar_n_to_lam_mu(n)
 
     if n == 0:
         if eps <= x <= 1.:

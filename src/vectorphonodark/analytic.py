@@ -30,6 +30,8 @@ import scipy.special as spf
 
 from . import basis_funcs
 
+# import vsdm
+
 
 @numba.njit
 def _b_nk_int(n, k, x):
@@ -137,12 +139,6 @@ def _t_l_ab_vq_int(l, a, b, v12_star, q12_star):
         # only terms with (l-k)%2==0 contribute to the sum:
         term_k = 2.**(l-k) * math.gamma(0.5*(k+1+l)) / math.gamma(0.5*(k+1-l))
         term_k /= (math.gamma(k+1)*math.gamma(l-k+1))
-        # if CHECK_CANCELLATION:
-        #     check_cancellation(
-        #         val1=_b_nk_int(a, k, x2),
-        #         val2=_b_nk_int(a, k, x1),
-        #         tag="_t_l_ab_vq_int"
-        #     )
         termQ = (_b_nk_int(a, k, x2) - _b_nk_int(a, k, x1))
         if k==b+2:
             termV = math.log(v2/v1)
@@ -170,27 +166,10 @@ def _u_l_ab_vq_int(l, a, b, v2_star, q12_star):
         term_k = (math.gamma(0.5*(k+1+l)) / math.gamma(0.5*(k+1-l))
                   * 2.**(l-k)/(math.gamma(k+1) * math.gamma(l-k+1)))
         if k==b+2:
-            # if CHECK_CANCELLATION:
-            #     check_cancellation(
-            #         val1=_b_nk_int(a, k, x2),
-            #         val2=_b_nk_int(a, k, x1),
-            #         tag="_u_l_ab_vq_int"
-            #     )
             term_x = (math.log(2.*v2)*(_b_nk_int(a, k, x2) - _b_nk_int(a, k, x1))
                       + _s_ab_int(a, b, x2) - _s_ab_int(a, b, x1))
             sum += term_k*term_x
         else:
-            # if CHECK_CANCELLATION:
-            #     check_cancellation(
-            #         val1=_b_nk_int(a, k, x2),
-            #         val2=_b_nk_int(a, k, x1),
-            #         tag="_u_l_ab_vq_int"
-            #     )
-            #     check_cancellation(
-            #         val1=_b_nk_int(a, b+2, x2),
-            #         val2=_b_nk_int(a, b+2, x1),
-            #         tag="_u_l_ab_vq_int"
-            #     )
             t_x = (v2**(b+2-k)*(_b_nk_int(a, k, x2) - _b_nk_int(a, k, x1))
                    - 2.**(k-b-2)*(_b_nk_int(a, b+2, x2) - _b_nk_int(a, b+2, x1)))
             sum += term_k*t_x/(b+2-k)
@@ -274,95 +253,130 @@ def mI_star(ell, fdm, v12_star, q12_star):
 def ilvq_analytic(lnvq, v_max, q_max, log_wavelet_q, eps_q, 
                   fdm, q0_fdm, v0_fdm,
                   mass_dm, mass_sm, energy, verbose=False):
-        (ell, nv, nq) = lnvq
-        (a, b) = fdm
-        mass_reduced = (mass_dm * mass_sm) / (mass_dm + mass_sm)
+    """
+    Compute I_l(nv,nq) analytically for given wavelet indices.
+    
+    Parameters
+    ----------
+    lnvq : tuple[int, int, int]
+        Tuple of (ell, nv, nq) wavelet indices.
+    v_max : float
+        Maximum velocity for wavelet basis.
+    q_max : float
+        Maximum momentum transfer for wavelet basis.
+    log_wavelet_q : bool
+        Whether momentum wavelets are log-spaced.
+    eps_q : float
+        Minimum momentum fraction for log-spaced wavelets.
+    fdm : tuple
+        Dark matter form factor parameters (a,b) with
+        F_DM(q,v) = (q/q0)**a * (v/v0)**b
+    q0_fdm : float
+        Reference momentum for form factor in eV.
+    v0_fdm : float
+        Reference velocity for form factor (dimensionless).
+    mass_dm : float
+        Dark matter mass in eV.
+    mass_sm : float
+        Standard model target mass in eV.
+    energy : float
+        Energy transfer in eV.
+    verbose : bool, optional
+        Whether to print verbose output. Default is False.  
 
-        # Integrand is written in terms of dimensionless vStar and qStar:
-        qStar = np.sqrt(2*mass_dm*energy)
-        vStar = qStar/mass_dm
+    Returns
+    -------
+    Ilvq : float
+        The computed I_l(nv,nq) value.
+    """
+    
+    (ell, nv, nq) = lnvq
+    (a, b) = fdm
+    mass_reduced = (mass_dm * mass_sm) / (mass_dm + mass_sm)
 
-        factor = (
-            (q_max/v_max)**3 / (2*mass_dm*mass_reduced**2) 
-            * (2*energy/(q_max*v_max))**2
-            * (qStar/q0_fdm)**a * (vStar/v0_fdm)**b
-        )
-        n_regions = [1,1]
+    # Integrand is written in terms of dimensionless vStar and qStar:
+    qStar = np.sqrt(2*mass_dm*energy)
+    vStar = qStar/mass_dm
 
-        v1, v2, v3 = basis_funcs.haar_support(nv)
-        if nv==0:
-            A_v, _ = basis_funcs.haar_value(nv, dim=3)
-            n_regions[0] = 1
+    factor = (
+        (q_max/v_max)**3 / (2*mass_dm*mass_reduced**2) 
+        * (2*energy/(q_max*v_max))**2
+        * (qStar/q0_fdm)**a * (vStar/v0_fdm)**b
+    )
+    n_regions = [1,1]
+
+    v1, v2, v3 = basis_funcs.haar_support(nv)
+    if nv==0:
+        A_v, _ = basis_funcs.haar_value(nv, dim=3)
+        n_regions[0] = 1
+    else:
+        A_v, B_v = basis_funcs.haar_value(nv, dim=3)
+        n_regions[0] = 2
+    v1, v2, v3 = v1*v_max, v2*v_max, v3*v_max
+
+    if log_wavelet_q:
+        q1, q2, q3 = basis_funcs.haar_support_log(nq, eps_q)
+        if nq==0:
+            A_q, _ = basis_funcs.haar_value_log(nq, eps_q, p=2)
+            n_regions[1] = 1
         else:
-            A_v, B_v = basis_funcs.haar_value(nv, dim=3)
-            n_regions[0] = 2
-        v1, v2, v3 = v1*v_max, v2*v_max, v3*v_max
-
-        if log_wavelet_q:
-            q1, q2, q3 = basis_funcs.haar_support_log(nq, eps_q)
-            if nq==0:
-                A_q, _ = basis_funcs.haar_value_log(nq, eps_q, p=2)
-                n_regions[1] = 1
-            else:
-                A_q, B_q = basis_funcs.haar_value_log(nq, eps_q, p=2)
-                n_regions[1] = 2
+            A_q, B_q = basis_funcs.haar_value_log(nq, eps_q, p=2)
+            n_regions[1] = 2
+    else:
+        q1, q2, q3 = basis_funcs.haar_support(nq)
+        if nq==0:
+            A_q, _ = basis_funcs.haar_value(nq, dim=3)
+            n_regions[1] = 1
         else:
-            q1, q2, q3 = basis_funcs.haar_support(nq)
-            if nq==0:
-                A_q, _ = basis_funcs.haar_value(nq, dim=3)
-                n_regions[1] = 1
-            else:
-                A_q, B_q = basis_funcs.haar_value(nq, dim=3)
-                n_regions[1] = 2
-        q1, q2, q3 = q1*q_max, q2*q_max, q3*q_max
+            A_q, B_q = basis_funcs.haar_value(nq, dim=3)
+            n_regions[1] = 2
+    q1, q2, q3 = q1*q_max, q2*q_max, q3*q_max
 
-        # There is always an A_v A_q term:
-        v12_star = [v1/vStar, v2/vStar]
-        q12_star = [q1/qStar, q2/qStar]
-        term_AA = A_v*A_q * mI_star(ell, fdm, v12_star, q12_star)
+    # There is always an A_v A_q term:
+    v12_star = [v1/vStar, v2/vStar]
+    q12_star = [q1/qStar, q2/qStar]
+    term_AA = A_v*A_q * mI_star(ell, fdm, v12_star, q12_star)
 
-        # There are only B-type contributions if V or Q uses wavelets
-        term_AB, term_BA, term_BB = 0., 0., 0.
-        if n_regions[0]==2:
-            v23_star = [v2/vStar, v3/vStar]
-            term_BA = B_v*A_q * mI_star(ell, fdm, v23_star, q12_star)
-        if n_regions[1]==2:
-            q23_star = [q2/qStar, q3/qStar]
-            term_AB = A_v*B_q * mI_star(ell, fdm, v12_star, q23_star)
-        if n_regions==[2,2]:
-            term_BB = B_v*B_q * mI_star(ell, fdm, v23_star, q23_star)
-        Ilvq = factor * (term_AA + term_BA + term_AB + term_BB)
+    # There are only B-type contributions if V or Q uses wavelets
+    term_AB, term_BA, term_BB = 0., 0., 0.
+    if n_regions[0]==2:
+        v23_star = [v2/vStar, v3/vStar]
+        term_BA = B_v*A_q * mI_star(ell, fdm, v23_star, q12_star)
+    if n_regions[1]==2:
+        q23_star = [q2/qStar, q3/qStar]
+        term_AB = A_v*B_q * mI_star(ell, fdm, v12_star, q23_star)
+    if n_regions==[2,2]:
+        term_BB = B_v*B_q * mI_star(ell, fdm, v23_star, q23_star)
+    Ilvq = factor * (term_AA + term_BA + term_AB + term_BB)
 
-        return Ilvq
+    return Ilvq
 
 
-def ilvq_vsdm(lnvq, v_max, q_max, log_wavelet_q, eps_q, 
-              fdm, q0_fdm, v0_fdm,
-              mass_dm, mass_sm, energy, verbose=False):
-        """
-        Compute I_l(nv,nq) using the vsdm package.
-        Only works for linear wavelets.
-        The scaling for q and v are fixed inside vsdm.McalI,
-            with q0_fdm = Q_BOHR and v0_fdm = 1.0.
-        """
-        
-        if log_wavelet_q:
-            raise NotImplementedError("vsdm McalI does not support log wavelets yet.")
-        
-        (ell, nv, nq) = lnvq
+# def ilvq_vsdm(lnvq, v_max, q_max, log_wavelet_q, eps_q, 
+#               fdm, q0_fdm, v0_fdm,
+#               mass_dm, mass_sm, energy, verbose=False):
+#     """
+#     Compute I_l(nv,nq) using the vsdm package.
+#     Only works for linear wavelets.
+#     The scaling for q and v are fixed inside vsdm.McalI,
+#         with q0_fdm = Q_BOHR and v0_fdm = 1.0.
+#     """
+    
+#     if log_wavelet_q:
+#         raise NotImplementedError("vsdm McalI does not support log wavelets yet.")
+    
+#     (ell, nv, nq) = lnvq
 
-        import vsdm
+#     basis_v = dict(u0=v_max, type="wavelet", uMax=v_max)
+#     basis_q = dict(u0=q_max, type="wavelet", uMax=q_max)
+#     dm_model = dict(mX=mass_dm, fdm=fdm, mSM=mass_sm, DeltaE=energy)
+#     mI = vsdm.McalI(
+#         basis_v, basis_q, dm_model, use_gvar=False, do_mcalI=False
+#     )
 
-        basis_v = dict(u0=v_max, type="wavelet", uMax=v_max)
-        basis_q = dict(u0=q_max, type="wavelet", uMax=q_max)
-        dm_model = dict(mX=mass_dm, fdm=fdm, mSM=mass_sm, DeltaE=energy)
-        mI = vsdm.McalI(
-            basis_v, basis_q, dm_model, use_gvar=False, do_mcalI=False
-        )
+#     Ilvq = mI.getI_lvq_analytic((ell, nv, nq))
 
-        Ilvq = mI.getI_lvq_analytic((ell, nv, nq))
-
-        return Ilvq
+#     return Ilvq
 
 
 @numba.njit(parallel=True)
@@ -370,6 +384,46 @@ def ilvq(l_max, nv_list, nq_list,
          v_max, q_max, log_wavelet_q, eps_q, 
          fdm, q0_fdm, v0_fdm,
          mass_dm, mass_sm, energy, verbose=False):
+    """
+    Compute I_l(nv,nq) for all l in [0,l_max], nv in nv_list, nq in nq_list.
+
+    Parameters
+    ----------
+    l_max : int
+        Maximum l value.
+    nv_list : list[int]
+        List of nv indices.
+    nq_list : list[int]
+        List of nq indices.
+    v_max : float
+        Maximum velocity.
+    q_max : float
+        Maximum momentum transfer.
+    log_wavelet_q : bool
+        Whether the q wavelets are log-spaced.
+    eps_q : float
+        Minimum q/q_max value for log-spaced q wavelets.
+    fdm : tuple
+        Dark matter form factor parameters (a,b) with
+        F_DM(q,v) = (q/q0)**a * (v/v0)**b
+    q0_fdm : float
+        Reference momentum transfer for form factor.
+    v0_fdm : float
+        Reference velocity for form factor.
+    mass_dm : float
+        Dark matter mass.
+    mass_sm : float
+        Standard model target mass.
+    energy : float
+        Energy transfer.
+    verbose : bool, optional
+        Whether to print verbose output, by default False.
+
+    Returns
+    -------
+    ilvq_array : np.ndarray
+        Array of shape (l_max+1, len(nv_list), len(nq_list)) containing I_l(nv,nq) values.
+    """
     
     shape = (l_max + 1, len(nv_list), len(nq_list))
     ilvq_array = np.zeros(shape, dtype=float)

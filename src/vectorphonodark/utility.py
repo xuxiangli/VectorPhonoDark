@@ -1,15 +1,13 @@
 import numpy as np
-import math
 import numba
 import sys
-import os
-import phonopy
 import quaternionic
 from importlib import util
 from functools import reduce
 
-from . import constants as const
-# from . import phonopy_funcs
+import vsdm
+
+from . import basis_funcs
 
 
 # Define color codes for terminal output
@@ -27,14 +25,17 @@ def import_file(full_name, path):
     """
     Import a module from a given file path.
 
-    Args:
-        full_name:
-            str: The full name to assign to the module.
-        path:
-            str: The file path to the module.
+    Parameters
+    ----------
+    full_name : str
+        The full name to assign to the module.
+    path : str
+        The file path to the module.
 
-    Returns:
-        module: The imported module.
+    Returns
+    -------
+    module
+        The imported module.
     """
 
     spec = util.spec_from_file_location(full_name, path)
@@ -49,12 +50,17 @@ def sph_to_cart(vec_sph) -> np.ndarray:
     """
     Convert spherical coordinates to Cartesian coordinates.
 
-    Args:
-        vec_sph:
-            np.ndarray: An array of shape (..., 3) representing points in spherical coordinates (r, theta, phi).
+    Parameters
+    ----------
+    vec_sph : np.ndarray
+        An array of shape (..., 3) representing points in spherical coordinates 
+        (r, theta, phi).
 
-    Returns:
-        np.ndarray: An array of shape (..., 3) representing points in Cartesian coordinates (x, y, z).
+    Returns
+    -------
+    np.ndarray
+        An array of shape (..., 3) representing points in Cartesian coordinates 
+        (x, y, z).
     """
     r = vec_sph[..., 0]
     theta = vec_sph[..., 1]
@@ -71,12 +77,20 @@ def get_intersection_index(base=None, **lists):
     """
     Get the indices of common elements in multiple lists.
 
-    Args:
-        base_list (list): The base list to compare against.
-        **lists: Arbitrary number of lists to find common elements with.
+    If `base` is provided, it is used as the reference list to find common elements.
+    Otherwise, the first list in `lists` is used as the reference.
 
-    Returns:
-        np.ndarray: Array of indices in each list corresponding to the common elements.
+    Parameters
+    ----------
+    base : list, optional
+        The base list to compare against.
+    **lists : dict
+        Arbitrary number of lists to find common elements with.
+
+    Returns
+    -------
+    np.ndarray
+        Array of indices in each list corresponding to the common elements.
             shape: (number of lists, number of common elements)
     """
     arrays = [np.asarray(l) for l in lists.values()]
@@ -100,6 +114,10 @@ def get_intersection_index(base=None, **lists):
 
 
 def getQ(theta, phi):
+    """
+    Get quaternionic representation of rotation given by Euler angles (theta, phi).
+    """
+
     axisphi = phi + np.pi / 2  # stationary under R
     axR = theta / 2
     qr = np.cos(axR)
@@ -109,422 +127,386 @@ def getQ(theta, phi):
     return quaternionic.array(qr, qi, qj, qk)
 
 
-# def run_phonopy(phonon_file, k_red) -> list[np.ndarray]:
-#     """
-#     Run phonopy to compute phonon eigenvectors and frequencies at given k-points.
-
-#     Args:
-#         phonon_file:
-#             Phonopy object: The phonopy object containing the phonon data.
-#         k_red:
-#             np.ndarray: An array of shape (N, 3) representing the reduced k-points.
-
-#     Returns:
-#         list[np.ndarray]: A list containing two elements:
-#             - eigenvectors: An array of shape (num_modes, num_atoms, 3) representing the phonon eigenvectors.
-#             - omega: An array of shape (num_modes,) representing the phonon frequencies in eV.
-#     """
-
-#     # run phonopy in mesh mode
-#     phonon_file.run_qpoints(k_red, with_eigenvectors=True)
-
-#     mesh_dict = phonon_file.get_qpoints_dict()
-
-#     eigenvectors_pre = mesh_dict["eigenvectors"]
-
-#     # convert frequencies to correct units
-#     omega = 2 * const.PI * (const.THz_To_eV) * mesh_dict["frequencies"][0]
-
-#     num_atoms = phonon_file.primitive.get_number_of_atoms()
-#     num_modes = 3 * num_atoms
-
-#     # q, nu, i, alpha
-#     eigenvectors = np.zeros((num_modes, num_atoms, 3), dtype=complex)
-
-#     # sort the eigenvectors
-#     for nu in range(num_modes):
-#         eigenvectors[nu][:][:] = np.array(
-#             np.array_split(eigenvectors_pre.T[nu], num_atoms)
-#         ).reshape(num_atoms, 3)
-
-#     return [eigenvectors, omega]
-
-
-def run_phonopy(phonon_file, k_mesh):
-    """
-        Given a phonon file and k mesh, Returns eigenvectors and frequencies in eV
-    """
-
-    # run phonopy in mesh mode 
-    phonon_file.run_qpoints(k_mesh, with_eigenvectors=True)
-
-    n_k = len(k_mesh)
-
-    mesh_dict = phonon_file.get_qpoints_dict()
-
-    eigenvectors_pre = mesh_dict['eigenvectors']
-
-    # convert frequencies to correct units
-    omega = 2*const.PI*(const.THz_To_eV)*mesh_dict['frequencies']
-
-    num_atoms = len(phonon_file.primitive)
-    num_modes = 3*num_atoms 
-
-    # q, nu, i, alpha
-    eigenvectors = np.zeros((n_k, num_modes, num_atoms, 3), dtype=complex)
-
-    # sort the eigenvectors
-    for q in range(n_k):
-        for nu in range(num_modes):
-            eigenvectors[q][nu][:][:] = np.array_split(
-                    eigenvectors_pre[q].T[nu], num_atoms)
-
-    return [eigenvectors, omega]
-
-
-def load_phonopy_file(material, io_parameters, supercell, poscar_path, force_sets_path, born_path,
-                        proc_id = 0, root_process = 0):
-
-
-    if os.path.exists(io_parameters['material_data_folder']+material+'/BORN'):
-
-        born_exists = True
-
-    else:
-
-        if proc_id == root_process: 
-
-            print('\tThere is no BORN file for '+material)
-            print()
-
-        born_exists = False
-
-    if born_exists: 
-
-        phonon_file = phonopy.load(
-                            supercell_matrix    = supercell,
-                            primitive_matrix    = 'auto',
-                            unitcell_filename   = poscar_path,
-                            force_sets_filename = force_sets_path,
-                            is_nac              = True,
-                            born_filename       = born_path
-                           )
-
-    else:
-
-        if proc_id == root_process:
-
-            print('\tNo BORN file found for : '+material)
-
-        raise NotImplementedError("Phonopy utility: Loading without BORN file is not implemented.")
-    
-        # phonon_file = phonopy.load(
-        #                     supercell_matrix    = supercell_data[material],
-        #                     primitive_matrix    = 'auto',
-        #                     unitcell_filename   = poscar_path,
-        #                     force_sets_filename = force_sets_path
-        #                    )
-
-    return [phonon_file, born_exists]
-
-
-def get_phonon_file_data(phonon_file, born_exists):
-    """
-        Returns:
-
-            n_atoms - number of atoms in primitive cell
-
-            n_modes - number of modes = 3*n_atoms
-
-            Transformation matrices
-
-            pos_red_to_XYZ - reduced coordinate positions to XYZ
-
-            pos_XYZ_to_red - XYZ coordinates to red
-
-            recip_red_to_XYZ - reduced coordinates to XYZ
-
-            recip_XYZ_to_red - XYZ coordinates to reduced
-
-            eq_positions - equilibrium positions of atoms
-
-            atom_masses - masses of atoms in eV
-
-            A_list - Mass numbers (A)
-
-            Z_list - atomic numbers (Z)
-
-            born - Z_j
-
-            dielectric - high frequency dielectric
-
-    """
-
-    num_atoms = len(phonon_file.primitive)
-    num_modes = 3*num_atoms 
-
-    A_list = phonon_file.primitive.masses
-    Z_list = phonon_file.primitive.numbers
-
-    eq_positions_XYZ = const.Ang_To_inveV*phonon_file.primitive.positions
-
-    atom_masses = const.AMU_To_eV*phonon_file.primitive.masses
-
-    primitive_mat = phonon_file.primitive.cell
-
-    pos_red_to_XYZ = const.Ang_To_inveV*np.transpose(primitive_mat)
-    pos_XYZ_to_red = np.linalg.inv(pos_red_to_XYZ)
-
-    a_vec = np.matmul(pos_red_to_XYZ, [1, 0, 0])
-    b_vec = np.matmul(pos_red_to_XYZ, [0, 1, 0])
-    c_vec = np.matmul(pos_red_to_XYZ, [0, 0, 1])
-
-    recip_lat_a = 2*const.PI*(np.cross(b_vec, c_vec))/(np.matmul(a_vec, np.cross(b_vec, c_vec)))
-    recip_lat_b = 2*const.PI*(np.cross(c_vec, a_vec))/(np.matmul(b_vec, np.cross(c_vec, a_vec)))
-    recip_lat_c = 2*const.PI*(np.cross(a_vec, b_vec))/(np.matmul(c_vec, np.cross(a_vec, b_vec)))
-
-    recip_red_to_XYZ = np.transpose([recip_lat_a, recip_lat_b, recip_lat_c])
-    recip_XYZ_to_red = np.linalg.inv(recip_red_to_XYZ)
-
-    if born_exists:
-
-        born       = phonon_file.nac_params['born']
-        dielectric = phonon_file.nac_params['dielectric']
-
-    else:
-
-        born       = np.zeros((num_atoms, 3, 3))
-        dielectric = np.identity(3)
-
-    return {
-            'num_atoms': num_atoms,
-            'num_modes': num_modes,
-            'pos_red_to_XYZ': pos_red_to_XYZ,
-            'pos_XYZ_to_red': pos_XYZ_to_red,
-            'recip_red_to_XYZ': recip_red_to_XYZ,
-            'recip_XYZ_to_red': recip_XYZ_to_red,
-            'eq_positions_XYZ': eq_positions_XYZ,
-            'atom_masses': atom_masses,
-            'A_list': A_list,
-            'Z_list': Z_list,
-            'born': born,
-            'dielectric': dielectric}
-
-
 @numba.njit
-def get_kG_from_q_red(q_red_vec, q_red_to_XYZ):
-    """
-    q_red_vec: q vector in reduced coordinates
-    q_red_to_XYZ: matrix converting q in reduced coordinates to XYZ
-
-    output: [k_red_vec, G_red_vec]: the k and G vectors in reduced coordinates
-
-    """
-    set_of_closest_G_red = np.zeros((8, 3), dtype=np.float64)
-
-    set_of_closest_G_red[0] = [
-        math.floor(q_red_vec[0]),
-        math.floor(q_red_vec[1]),
-        math.floor(q_red_vec[2]),
-    ]
-    set_of_closest_G_red[1] = [
-        math.floor(q_red_vec[0]),
-        math.floor(q_red_vec[1]),
-        math.ceil(q_red_vec[2]),
-    ]
-    set_of_closest_G_red[2] = [
-        math.floor(q_red_vec[0]),
-        math.ceil(q_red_vec[1]),
-        math.floor(q_red_vec[2]),
-    ]
-    set_of_closest_G_red[3] = [
-        math.ceil(q_red_vec[0]),
-        math.floor(q_red_vec[1]),
-        math.floor(q_red_vec[2]),
-    ]
-    set_of_closest_G_red[4] = [
-        math.floor(q_red_vec[0]),
-        math.ceil(q_red_vec[1]),
-        math.ceil(q_red_vec[2]),
-    ]
-    set_of_closest_G_red[5] = [
-        math.ceil(q_red_vec[0]),
-        math.floor(q_red_vec[1]),
-        math.ceil(q_red_vec[2]),
-    ]
-    set_of_closest_G_red[6] = [
-        math.ceil(q_red_vec[0]),
-        math.ceil(q_red_vec[1]),
-        math.floor(q_red_vec[2]),
-    ]
-    set_of_closest_G_red[7] = [
-        math.ceil(q_red_vec[0]),
-        math.ceil(q_red_vec[1]),
-        math.ceil(q_red_vec[2]),
-    ]
-
-    # q_XYZ_vec = q_red_to_XYZ @ q_red_vec
-    q_XYZ_vec = [
-        q_red_to_XYZ[0, 0] * q_red_vec[0]
-        + q_red_to_XYZ[0, 1] * q_red_vec[1]
-        + q_red_to_XYZ[0, 2] * q_red_vec[2],
-        q_red_to_XYZ[1, 0] * q_red_vec[0]
-        + q_red_to_XYZ[1, 1] * q_red_vec[1]
-        + q_red_to_XYZ[1, 2] * q_red_vec[2],
-        q_red_to_XYZ[2, 0] * q_red_vec[0]
-        + q_red_to_XYZ[2, 1] * q_red_vec[1]
-        + q_red_to_XYZ[2, 2] * q_red_vec[2],
-    ]
-
-    first = True
-
-    for vec in set_of_closest_G_red:
-
-        # diff_vec = q_XYZ_vec - q_red_to_XYZ @ vec
-        diff_vec = [
-            q_XYZ_vec[0]
-            - (
-                q_red_to_XYZ[0, 0] * vec[0]
-                + q_red_to_XYZ[0, 1] * vec[1]
-                + q_red_to_XYZ[0, 2] * vec[2]
-            ),
-            q_XYZ_vec[1]
-            - (
-                q_red_to_XYZ[1, 0] * vec[0]
-                + q_red_to_XYZ[1, 1] * vec[1]
-                + q_red_to_XYZ[1, 2] * vec[2]
-            ),
-            q_XYZ_vec[2]
-            - (
-                q_red_to_XYZ[2, 0] * vec[0]
-                + q_red_to_XYZ[2, 1] * vec[1]
-                + q_red_to_XYZ[2, 2] * vec[2]
-            ),
-        ]
-        diff_vec_sq = (
-            diff_vec[0] * diff_vec[0]
-            + diff_vec[1] * diff_vec[1]
-            + diff_vec[2] * diff_vec[2]
-        )
-
-        if first:
-            min_dist_sq = diff_vec_sq
-            first = False
-
-        if diff_vec_sq <= min_dist_sq:
-            min_vec = vec
-
-    G_red_vec = min_vec
-
-    # k_red_vec = np.array(q_red_vec) - np.array(G_red_vec)
-    k_red_vec = [
-        q_red_vec[0] - G_red_vec[0],
-        q_red_vec[1] - G_red_vec[1],
-        q_red_vec[2] - G_red_vec[2],
-    ]
-
-    return k_red_vec, G_red_vec
-
-
-@numba.njit
-def get_kG_from_q_XYZ(q_XYZ_vec, q_red_to_XYZ) -> tuple[np.ndarray, np.ndarray]:
-    """
-    q_XYZ_vec: q vector in XYZ coordinates
-    q_red_to_XYZ: matrix converting q in reduced coordinates to XYZ
-
-    output: [k_red_vec, G_red_vec]: the k and G vectors in reduced coordinates
-    """
-
-    q_red_vec = np.dot(np.linalg.inv(q_red_to_XYZ), q_XYZ_vec)
-
-    set_of_closest_G_red = np.zeros((8, 3), dtype=np.float64)
-
-    set_of_closest_G_red[0] = np.array(
-        [math.floor(q_red_vec[0]), math.floor(q_red_vec[1]), math.floor(q_red_vec[2])]
-    )
-    set_of_closest_G_red[1] = np.array(
-        [math.floor(q_red_vec[0]), math.floor(q_red_vec[1]), math.ceil(q_red_vec[2])]
-    )
-    set_of_closest_G_red[2] = np.array(
-        [math.floor(q_red_vec[0]), math.ceil(q_red_vec[1]), math.floor(q_red_vec[2])]
-    )
-    set_of_closest_G_red[3] = np.array(
-        [math.ceil(q_red_vec[0]), math.floor(q_red_vec[1]), math.floor(q_red_vec[2])]
-    )
-    set_of_closest_G_red[4] = np.array(
-        [math.floor(q_red_vec[0]), math.ceil(q_red_vec[1]), math.ceil(q_red_vec[2])]
-    )
-    set_of_closest_G_red[5] = np.array(
-        [math.ceil(q_red_vec[0]), math.floor(q_red_vec[1]), math.ceil(q_red_vec[2])]
-    )
-    set_of_closest_G_red[6] = np.array(
-        [math.ceil(q_red_vec[0]), math.ceil(q_red_vec[1]), math.floor(q_red_vec[2])]
-    )
-    set_of_closest_G_red[7] = np.array(
-        [math.ceil(q_red_vec[0]), math.ceil(q_red_vec[1]), math.ceil(q_red_vec[2])]
-    )
-
-    first = True
-
-    for vec in set_of_closest_G_red:
-
-        vec = np.ascontiguousarray(vec)
-        diff_vec = q_XYZ_vec - q_red_to_XYZ @ vec
-
-        if first:
-            min_dist_sq = np.dot(diff_vec, diff_vec)
-            min_vec = vec
-            first = False
-
-        if np.dot(diff_vec, diff_vec) <= min_dist_sq:
-            min_dist_sq = np.dot(diff_vec, diff_vec)
-            min_vec = vec
-
-    G_red_vec = min_vec
-
-    k_red_vec = q_red_vec - G_red_vec
-
-    return k_red_vec, G_red_vec
-
-
-@numba.njit
-def get_kG_list_from_q_xyz_list(
-    q_xyz_list, recip_red_to_XYZ
-) -> tuple[np.ndarray, np.ndarray]:
-    """
-    Returns the k and G vectors in reduced coordinates given a q vector.
-    """
-
-    n_q = len(q_xyz_list)
-
-    k_mesh = np.zeros((n_q, 3), dtype=np.float64)
-    G_xyz_list = np.zeros((n_q, 3), dtype=np.float64)
-
-    for i_q in range(n_q):
-
-        q_xyz = q_xyz_list[i_q]
-
-        k_red_vec, G_red_vec = get_kG_from_q_XYZ(q_xyz, recip_red_to_XYZ)
-        k_mesh[i_q] = k_red_vec
-        G_xyz_list[i_q] = recip_red_to_XYZ @ G_red_vec
-
-    return k_mesh, G_xyz_list
-
-
-def get_G_eigenvectors_omega_from_q_xyz(
-    q_xyz_list, phonon_file, phonopy_params
+def gen_mesh_ylm_jacob(
+    lm_list: list[tuple[int, int]],
+    u_max: float,
+    n_a: int,
+    n_b: int,
+    n_c: int,
+    power_a: float = 1,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
-    Get q_xyz, G_xyz, eigenvectors, and omega from a q_sph mesh.
+    Generate power-spaced mesh points, spherical harmonic values, and Jacobian.
+
+    The mesh points are taken in between 0 and u_max in the radial direction,
+    and are evenly spaced in theta and phi directions. 
+    
+    The radial grid can be linear or power-law spaced depending on the power_a 
+    parameter.
+
+    Parameters
+    ----------
+    lm_list : list of tuples
+        List of (l, m) tuples.
+    u_max : float
+        Maximum radial value.
+    n_a : int
+        Number of radial grid points.
+    n_b : int
+        Number of theta grid points.
+    n_c : int
+        Number of phi grid points.
+    power_a : float
+        Power for radial grid spacing.
+
+    Returns
+    -------
+    u_xyz_list : np.ndarray
+        An array of shape (n_a*n_b*n_c, 3) representing Cartesian coordinates 
+        of the mesh points.
+    y_lm_vals : dict
+        A dictionary with keys as (l, m) tuples and values as arrays of shape 
+        (n_b, n_c) representing spherical harmonic values.
+    jacob_list : np.ndarray
+        An array of shape (n_a,) representing Jacobian values for integration.
     """
 
-    # reciprocal matrix to convert q in reduced coordinates to XYZ
-    recip_red_to_XYZ = np.array(phonopy_params["recip_red_to_XYZ"])
+    dcostheta = 2.0 / n_b
+    theta_list = np.arccos(
+        -np.linspace(-1.0 + dcostheta / 2, 1.0 - dcostheta / 2, n_b)
+    )
+    dphi = 2 * np.pi / n_c
+    phi_list = np.linspace(dphi / 2, 2 * np.pi - dphi / 2, n_c)
 
-    # get corresponding vector k in the first Brillouin zone and G = q - k
-    k_red_list, G_xyz_list = get_kG_list_from_q_xyz_list(q_xyz_list, recip_red_to_XYZ)
+    y_lm_vals = {}
+    for l, m in lm_list:
+        y_lm_vals[(l, m)] = np.array(
+            [
+                vsdm.ylm_real(l, m, theta, phi)
+                for theta in theta_list
+                for phi in phi_list
+            ]
+        ).reshape(n_b, n_c)
 
-    # run phonopy to get polarization vectors and photon energies
-    [ph_eigenvectors, ph_omega] = run_phonopy(phonon_file, k_red_list)
+    da = 1.0 / n_a
+    a_list = np.linspace(da / 2, 1.0 - da / 2, n_a)
+    if power_a == 1:
+        dr = da
+        r_list = a_list
+        jacob_vals = r_list**2 * dr * dcostheta * dphi
+    else:
+        dr_list = power_a * np.power(a_list, power_a - 1) * da
+        r_list = np.power(a_list, power_a)
+        jacob_vals = r_list**2 * dr_list * dcostheta * dphi
 
-    return G_xyz_list, ph_eigenvectors, ph_omega
+    u_sph_list = np.array(
+        [
+            [u_max * r, theta, phi]
+            for r in r_list
+            for theta in theta_list
+            for phi in phi_list
+        ]
+    ).reshape(n_a * n_b * n_c, 3)
+    u_xyz_list = sph_to_cart(u_sph_list)
+
+    return u_xyz_list, y_lm_vals, jacob_vals
+
+
+@numba.njit
+def gen_log_mesh_ylm_jacob(
+    lm_list: list[tuple[int, int]],
+    u_max: float,
+    n_a: int,
+    n_b: int,
+    n_c: int,
+    eps: float = 0.,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """
+    Generate log-spaced mesh points, spherical harmonic values, and Jacobian.
+
+    The mesh points are taken evenly in logarithmic scale in between eps*u_max 
+    and u_max in the radial direction, and are evenly spaced in theta and phi 
+    directions.
+
+    Parameters
+    ----------
+    lm_list : list of tuples
+        List of (l, m) tuples.
+    u_max : float
+        Maximum radial value.
+    n_a : int
+        Number of radial grid points.
+    n_b : int
+        Number of theta grid points.
+    n_c : int
+        Number of phi grid points.
+    eps : float
+        Minimum radial value, taken in (0, 1).
+
+    Returns
+    -------
+    u_xyz_list : np.ndarray
+        An array of shape (n_a*n_b*n_c, 3) representing Cartesian coordinates 
+        of the mesh points.
+    y_lm_vals : dict
+        A dictionary with keys as (l, m) tuples and values as arrays of shape 
+        (n_b, n_c) representing spherical harmonic values.
+    jacob_list : np.ndarray
+        An array of shape (n_a,) representing Jacobian values for integration.
+    """
+
+    dcostheta = 2.0 / n_b
+    theta_list = np.arccos(
+        -np.linspace(-1.0 + dcostheta / 2, 1.0 - dcostheta / 2, n_b)
+    )
+    dphi = 2 * np.pi / n_c
+    phi_list = np.linspace(dphi / 2, 2 * np.pi - dphi / 2, n_c)
+
+    y_lm_vals = {}
+    for l, m in lm_list:
+        y_lm_vals[(l, m)] = np.array(
+            [
+                vsdm.ylm_real(l, m, theta, phi)
+                for theta in theta_list
+                for phi in phi_list
+            ]
+        ).reshape(n_b, n_c)
+
+    da = 1.0 / n_a
+    a_list = np.linspace(da / 2, 1.0 - da / 2, n_a)
+
+    length = np.log(1. / eps)
+    r_list = eps * np.exp(a_list * length)
+    jacob_list = r_list**2 * (r_list * length * da) * dcostheta * dphi
+
+    u_sph_list = np.array(
+        [
+            [u_max * r, theta, phi]
+            for r in r_list
+            for theta in theta_list
+            for phi in phi_list
+        ]
+    ).reshape(n_a * n_b * n_c, 3)
+    u_xyz_list = sph_to_cart(u_sph_list)
+
+    return u_xyz_list, y_lm_vals, jacob_list
+
+
+@numba.njit
+def get_wavelet_boundary(n, n_a, power_a=1) -> tuple[int, int, int]:
+    """
+    Get the boundary of the order n wavelet in radial direction of the mesh
+    with n_a points and power scaling power_a.
+
+    Parameters
+    ----------
+    n : int
+        Wavelet order.
+    n_a : int
+        Number of radial points.
+    power_a : float, optional
+        Power for radial grid spacing. Default is 1.
+
+    Returns
+    -------
+    tuple[int, int, int]
+        The (r_min_idx, r_mid_idx, r_max_idx) indices for the wavelet boundaries.
+
+    Examples
+    --------
+    >>> n_a = 16
+    >>> power_a = 1
+    >>> for n in range(5):
+    ...     r_min_idx, r_mid_idx, r_max_idx = get_wavelet_boundary(n, n_a, power_a)
+    ...     print(f"n={n}: r_min_idx={r_min_idx}, r_mid_idx={r_mid_idx}, r_max_idx={r_max_idx}")
+    n=0: r_min_idx=0, r_mid_idx=16, r_max_idx=16
+    n=1: r_min_idx=0, r_mid_idx=8, r_max_idx=16
+    n=2: r_min_idx=8, r_mid_idx=12, r_max_idx=16
+    n=3: r_min_idx=4, r_mid_idx=6, r_max_idx=8
+    n=4: r_min_idx=6, r_mid_idx=7, r_max_idx=8
+    """
+
+    if n == 0:
+        r_min_idx = 0
+        r_mid_idx = n_a
+        r_max_idx = n_a
+    else:
+        x_min, x_mid, x_max = basis_funcs.haar_support(n)
+        # Linear or power-law grid
+        if power_a == 1:
+            r_min_idx = int(x_min * n_a)
+            r_mid_idx = int(x_mid * n_a)
+            r_max_idx = int(x_max * n_a)
+        else:
+            r_min_idx = int(np.power(x_min, 1.0 / power_a) * n_a)
+            r_mid_idx = int(np.power(x_mid, 1.0 / power_a) * n_a)
+            r_max_idx = int(np.power(x_max, 1.0 / power_a) * n_a)
+
+    return r_min_idx, r_mid_idx, r_max_idx
+
+
+@numba.njit
+def get_wavelet_boundary_log(n, n_a, eps) -> tuple[int, int, int]:
+    """
+    Get the boundary of the order n wavelet in radial direction of the log-spaced
+    mesh with n_a points between eps and 1.0.
+
+    Parameters
+    ----------
+    n : int
+        Wavelet order.
+    n_a : int
+        Number of radial points.
+    eps : float
+        Minimum radial value, taken in (0, 1).
+
+    Returns
+    -------
+    tuple[int, int, int]
+        The (r_min_idx, r_mid_idx, r_max_idx) indices for the wavelet boundaries.
+    """
+
+    if n == 0:
+        r_min_idx = 0
+        r_mid_idx = n_a
+        r_max_idx = n_a
+    else:
+        x_min, x_mid, x_max = basis_funcs.haar_support_log(n, eps)
+        length = np.log(1.0 / eps)
+        r_min_idx = int(np.log(x_min / eps) / (length / n_a))
+        r_mid_idx = int(np.log(x_mid / eps) / (length / n_a))
+        r_max_idx = int(np.log(x_max / eps) / (length / n_a))
+
+    return r_min_idx, r_mid_idx, r_max_idx
+
+
+@numba.njit
+def proj_integrate_3d(
+    func_vals: np.ndarray,
+    haar_vals: float,
+    y_lm_vals: np.ndarray,
+    jacob_vals: np.ndarray,
+) -> float:
+    """
+    Perform 3D integration for projection using precomputed values.
+
+    Shape of func_vals: (n_r, n_theta, n_phi)
+    Shape of y_lm_vals: (n_theta, n_phi)
+    Shape of jacob_vals: (n_r)
+
+    Parameters
+    ----------
+    func_vals : np.ndarray
+        The function values on the 3d grid.
+    haar_vals : float
+        The Haar basis function values in the region.
+    y_lm_vals : np.ndarray
+        The spherical harmonic values on the angular grid.
+    jacob_vals : np.ndarray
+        The Jacobian values on the radial grid.
+
+    Returns
+    -------
+    float
+        The result of the 3D integration.
+    """
+    n_r, n_theta, n_phi = func_vals.shape
+    assert y_lm_vals.shape == (n_theta, n_phi)
+    assert jacob_vals.shape[0] == n_r
+    total = 0.0
+    for i in range(n_r):
+        temp = 0.0
+        for j in range(n_theta):
+            for k in range(n_phi):
+                temp += func_vals[i, j, k] * y_lm_vals[j, k]
+        total += temp * jacob_vals[i]
+    return total * haar_vals
+
+
+@numba.njit
+def proj_get_f_nlm(
+    n_list: np.ndarray,
+    lm_list: list[tuple[int, int]],
+    func_vals: np.ndarray,
+    y_lm_vals: dict[tuple[int, int], np.ndarray],
+    jacob_vals: np.ndarray,
+    n_a: int,
+    power_a: float = 1,
+    log_wavelet: bool = False,
+    eps: float = 1.,
+) -> dict[tuple[int, int, int], float]:
+    """
+    Project function values onto basis functions to obtain f_nlm coefficients.
+
+    Parameters
+    ----------
+    n_list : np.ndarray
+        List of radial Haar wavelet orders.
+    lm_list : list[tuple[int, int]]
+        List of (l, m) tuples representing angular quantum numbers.
+    func_vals : np.ndarray
+        The function values on the 3d grid.
+    y_lm_vals : dict[tuple[int, int], np.ndarray]
+        The spherical harmonic values on the angular grid.
+    jacob_vals : np.ndarray
+        The Jacobian values on the radial grid.
+    n_a : int
+        Number of radial points.
+    power_a : float
+        Power parameter for radial scaling.
+    log_wavelet : bool
+        Whether to use log-spaced wavelets.
+        If True, power_a is ignored and eps is used.
+    eps : float
+        Minimum radial value for log-spaced wavelets.
+
+    Returns
+    -------
+    dict[tuple[int, int, int], float]
+        A dictionary with keys as (n, l, m) tuples and values as the 
+        corresponding f_nlm coefficients.
+    """
+
+    f_nlm = {}
+
+    for idx_n in numba.prange(len(n_list)):
+        n = n_list[idx_n]
+
+        # Get wavelet values and boundaries
+        if log_wavelet:
+            value = basis_funcs.haar_value_log(n, eps=eps, p=2)
+            r_min_idx, r_mid_idx, r_max_idx = get_wavelet_boundary_log(
+                n, n_a, eps=eps
+            )   
+        else:
+            value = basis_funcs.haar_value(n, dim=3)
+            r_min_idx, r_mid_idx, r_max_idx = get_wavelet_boundary(
+                n, n_a, power_a=power_a
+            )
+
+        # Perform integration
+        if n == 0:
+            for l, m in lm_list:
+                f_nlm[(n, l, m)] = proj_integrate_3d(
+                    func_vals[r_min_idx:r_max_idx, :, :],
+                    value[0],
+                    y_lm_vals[(l, m)],
+                    jacob_vals[r_min_idx:r_max_idx],
+                )
+        else:
+            for l, m in lm_list:
+                f_nlm[(n, l, m)] = proj_integrate_3d(
+                    func_vals[r_min_idx:r_mid_idx, :, :],
+                    value[0],
+                    y_lm_vals[(l, m)],
+                    jacob_vals[r_min_idx:r_mid_idx],
+                )
+                f_nlm[(n, l, m)] += proj_integrate_3d(
+                    func_vals[r_mid_idx:r_max_idx, :, :],
+                    value[1],
+                    y_lm_vals[(l, m)],
+                    jacob_vals[r_mid_idx:r_max_idx],
+                )
+
+    return f_nlm

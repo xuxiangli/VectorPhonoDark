@@ -436,6 +436,76 @@ cdef double ilvq_analytic_c(int ell, int nv, int nq,
 # // Python Wrapper
 # // ---------------------------------------------------------
 
+def ilvq_analytic(int ell, 
+                  int nv, 
+                  int nq, 
+                  double v_max, 
+                  double q_max, 
+                  int log_wavelet_q, 
+                  double eps_q, 
+                  tuple fdm, 
+                  double q0_fdm, 
+                  double v0_fdm,
+                  double mass_dm, 
+                  double mass_sm, 
+                  double energy, 
+                  int verbose=0):
+    """
+    Compute I_l(nv,nq) analytically for given wavelet indices.
+    
+    Parameters
+    ----------
+    ell : int
+        Wavelet angular momentum index.
+    nv : int
+        Velocity wavelet index.
+    nq : int
+        Momentum wavelet index.
+    v_max : float
+        Maximum velocity for wavelet basis.
+    q_max : float
+        Maximum momentum transfer for wavelet basis.
+    log_wavelet_q : bool
+        Whether momentum wavelets are log-spaced.
+    eps_q : float
+        Minimum momentum fraction for log-spaced wavelets.
+    fdm : tuple
+        Dark matter form factor parameters (a,b) with
+        F_DM(q,v) = (q/q0)**a * (v/v0)**b
+    q0_fdm : float
+        Reference momentum for form factor in eV.
+    v0_fdm : float
+        Reference velocity for form factor (dimensionless).
+    mass_dm : float
+        Dark matter mass in eV.
+    mass_sm : float
+        Standard model target mass in eV.
+    energy : float
+        Energy transfer in eV.
+    verbose : bool, optional
+        Whether to print verbose output. Default is False.  
+
+    Returns
+    -------
+    Ilvq : float
+        The computed I_l(nv,nq) value.
+    """
+
+    cdef int a = fdm[0]
+    cdef int b = fdm[1]
+
+    cdef double ilvq
+    
+    with cython.nogil:
+        ilvq = ilvq_analytic_c(
+            ell, nv, nq,
+            v_max, q_max, log_wavelet_q, eps_q,
+            a, b, q0_fdm, v0_fdm,
+            mass_dm, mass_sm, energy
+        )
+    
+    return ilvq
+
 def ilvq(int l_max, 
          long[:] nv_list, 
          long[:] nq_list, 
@@ -450,6 +520,46 @@ def ilvq(int l_max,
          double mass_sm, 
          double energy, 
          int verbose=0):
+    """
+    Compute I_l(nv,nq) for all l in [0,l_max], nv in nv_list, nq in nq_list.
+
+    Parameters
+    ----------
+    l_max : int
+        Maximum l value.
+    nv_list : list[int]
+        List of nv indices.
+    nq_list : list[int]
+        List of nq indices.
+    v_max : float
+        Maximum velocity.
+    q_max : float
+        Maximum momentum transfer.
+    log_wavelet_q : bool
+        Whether the q wavelets are log-spaced.
+    eps_q : float
+        Minimum q/q_max value for log-spaced q wavelets.
+    fdm : tuple
+        Dark matter form factor parameters (a,b) with
+        F_DM(q,v) = (q/q0)**a * (v/v0)**b
+    q0_fdm : float
+        Reference momentum transfer for form factor.
+    v0_fdm : float
+        Reference velocity for form factor.
+    mass_dm : float
+        Dark matter mass.
+    mass_sm : float
+        Standard model target mass.
+    energy : float
+        Energy transfer.
+    verbose : bool, optional
+        Whether to print verbose output, by default False.
+
+    Returns
+    -------
+    ilvq_array : np.ndarray
+        Array of shape (l_max+1, len(nv_list), len(nq_list)) containing I_l(nv,nq) values.
+    """
     
     cdef int n_nv = nv_list.shape[0]
     cdef int n_nq = nq_list.shape[0]
