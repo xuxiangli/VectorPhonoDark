@@ -1,6 +1,7 @@
 import numpy as np
 import numba
 import sys
+import os
 import quaternionic
 from importlib import util
 from functools import reduce
@@ -38,7 +39,20 @@ def import_file(full_name, path):
         The imported module.
     """
 
-    spec = util.spec_from_file_location(full_name, path)
+    # Resolve the absolute path of the target file
+    abs_path = os.path.abspath(path)
+    cwd = os.path.abspath(os.getcwd())
+
+    # Security check: ensure path is within current working directory
+    if os.path.commonpath([cwd, abs_path]) != cwd:
+        raise ValueError(
+            f"Security Error: Attempted to import file outside of current working directory: {path}"
+        )
+
+    if not os.path.isfile(abs_path):
+        raise ValueError(f"File not found: {path}")
+
+    spec = util.spec_from_file_location(full_name, abs_path)
     mod = util.module_from_spec(spec)
     spec.loader.exec_module(mod)
 
