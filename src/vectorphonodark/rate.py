@@ -1,7 +1,59 @@
 import numpy as np
+import h5py
 
 from . import constants as const
-from .projection import BinnedMcalI
+from .projection import FormFactor, BinnedMcalI
+
+
+def import_all_form_factors(filename, groupname, dataname="data", verbose=True):
+    """
+    Utility function to import all form factors from a given HDF5 file and group.
+
+    Parameters
+    ----------
+    filename : str
+        Path to the HDF5 file containing the form factors.
+    groupname : str
+        Name of the group within the HDF5 file where the form factors are stored.
+    dataname : str, optional
+        Name of the dataset within each subgroup that contains the form factors.
+        Default is "data".
+    verbose : bool, optional
+        If True, print out the q_max values of the imported form factors. 
+        Default is True.
+
+    Returns
+    -------
+    form_factors : dict
+        A dictionary where keys are q_max values and 
+        values are the corresponding FormFactor objects.
+    q_max_list : list
+        A list of q_max values corresponding to the imported form factors.
+    """
+
+    form_factors = {}
+    q_max_list = []
+
+    with h5py.File(filename, "r") as h5f:
+        if groupname in h5f:
+            group = h5f[groupname]
+            for key in group.keys():
+                ff = FormFactor().import_hdf5(
+                    filename=filename,
+                    groupname=groupname + "/" + key,
+                    dataname=dataname,
+                    verbose=verbose,
+                )
+                q_max = ff.q_max
+                form_factors[q_max] = ff
+                q_max_list.append(q_max)
+    
+    q_max_list = np.array(sorted(q_max_list))
+
+    if verbose:
+        print(f"    Imported form factors with q_max values: {q_max_list} eV")
+
+    return form_factors, q_max_list
 
 
 class Rate:
@@ -17,14 +69,15 @@ class Rate:
     ----------
     physics_params : dict
         - fdm: function defining the dark matter form factor
-        - q0_fdm: reference momentum scale for the dark matter form factor
+        - q0_fdm: (optional) reference momentum scale for the dark matter form factor
+                default: Bohr momentum
         - mass_dm: mass of the dark matter particle
         - mass_sm: mass of the Standard Model particle (e.g. nucleus)
 
     numerics_params : dict
-        - l_max: maximum angular momentum quantum number for the projection
-        - nv_max: maximum velocity wavelet index
-        - nq_max: maximum momentum wavelet index
+        - l_max: (optional) maximum angular momentum quantum number for the projection
+        - nv_max: (optional) maximum velocity wavelet index
+        - nq_max: (optional) maximum momentum wavelet index
 
     Methods
     -------
@@ -37,22 +90,22 @@ class Rate:
     """
     def __init__(self, physics_params, numerics_params, vdf, ff, verbose=False):
 
-        if "l_max" in numerics_params:
-            self.l_max = min(numerics_params["l_max"], vdf.l_max, ff.l_max)
-        else:
+        if "l_max" not in numerics_params or numerics_params["l_max"] is None:
             self.l_max = min(vdf.l_max, ff.l_max)
+        else:
+            self.l_max = min(numerics_params["l_max"], vdf.l_max, ff.l_max)
 
         self.l_mod = max(vdf.l_mod, ff.l_mod)
 
-        if "nv_max" in numerics_params:
-            self.nv_max = min(numerics_params["nv_max"], vdf.n_max)
-        else:
+        if "nv_max" not in numerics_params or numerics_params["nv_max"] is None:
             self.nv_max = vdf.n_max
-
-        if "nq_max" in numerics_params:
-            self.nq_max = min(numerics_params["nq_max"], ff.n_max)
         else:
+            self.nv_max = min(numerics_params["nv_max"], vdf.n_max)
+
+        if "nq_max" not in numerics_params or numerics_params["nq_max"] is None:
             self.nq_max = ff.n_max
+        else:
+            self.nq_max = min(numerics_params["nq_max"], ff.n_max)
 
         self.v_max = vdf.v_max
         self.q_max = ff.q_max

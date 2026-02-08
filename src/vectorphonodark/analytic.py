@@ -40,8 +40,11 @@ def _b_nk_int(n, k, x):
     k = int(k)
     assert x!=0, "Range in 'x' should not include x=0, even if basis function includes q=0."
     sum = 0.
+    comb = 1.
     for j in range(k+1):
-        comb = math.gamma(k + 1) / (math.gamma(j + 1) * math.gamma(k - j + 1))
+        # comb = math.gamma(k + 1) / (math.gamma(j + 1) * math.gamma(k - j + 1))
+        if j > 0:
+            comb *= (k - j + 1.) / j
         ipower = j + (n-k)/2 + 1
         if ipower==0:
             summand = math.log(x)
@@ -78,21 +81,27 @@ def _c_alpha_int(alpha, x):
     elif alpha > 1: # other positive integers
         # sum = (-1)**alpha * math.log(1+x) / alpha + (1+x)**alpha / (2*alpha**2)
         sum = (-1)**alpha * math.log1p(x) / alpha + (1+x)**alpha / (2*alpha**2)
+        comb_alpha_j = alpha
         for j in range(1, alpha):
-            comb = (
-                math.gamma(alpha+1) / (math.gamma(j+1) * math.gamma(alpha-j+1))
-                + math.gamma(alpha) / (math.gamma(j+1) * math.gamma(alpha-j))
-            )
+            # comb = (
+            #     math.gamma(alpha+1) / (math.gamma(j+1) * math.gamma(alpha-j+1))
+            #     + math.gamma(alpha) / (math.gamma(j+1) * math.gamma(alpha-j))
+            # )
+            comb = comb_alpha_j * (2.*alpha-j) / j
+            comb_alpha_j *= (alpha-j) / (j+1.)
             sum += (-1)**(alpha-j)/(2*alpha*j) * comb * (1+x)**j
         return sum
     elif alpha < -1: # other negative integers
         yx = (1+x)/x
         sum = (-1)**alpha * math.log(yx) / alpha - yx**(-alpha) / (2*alpha**2)
+        comb_alpha_j = -alpha
         for j in range(1, -alpha):
-            comb = (
-                math.gamma(-alpha+1) / (math.gamma(j+1) * math.gamma(-alpha-j+1))
-                + math.gamma(-alpha) / (math.gamma(j+1) * math.gamma(-alpha-j))
-            )
+            # comb = (
+            #     math.gamma(-alpha+1) / (math.gamma(j+1) * math.gamma(-alpha-j+1))
+            #     + math.gamma(-alpha) / (math.gamma(j+1) * math.gamma(-alpha-j))
+            # )
+            comb = comb_alpha_j * (-2.*alpha-j) / j
+            comb_alpha_j *= (-alpha-j) / (j+1.)
             sum += (-1)**(alpha+j)/(2*alpha*j) * comb * yx**j
         return sum
 
@@ -100,8 +109,11 @@ def _c_alpha_int(alpha, x):
 @numba.njit
 def _v_ab_int(a, b, x):
     sum_2 = 0.
-    for j in range(0, b+2+1):
-        comb = math.gamma(b+2+1) / (math.gamma(j+1) * math.gamma(b+2-j+1))
+    comb = 1.
+    for j in range(b+2+1):
+        # comb = math.gamma(b+2+1) / (math.gamma(j+1) * math.gamma(b+2-j+1))
+        if j > 0:
+            comb *= (b+2-j+1.) / j
         if 2*j==(b-a):
             sum_2 += comb * math.log(x)
         else:
@@ -113,8 +125,11 @@ def _v_ab_int(a, b, x):
 def _s_ab_int(a, b, x):
     logfactor = 0.5*math.log(x/((1+x)**2))
     sum = logfactor*_v_ab_int(a, b, x)
-    for j in range(0, b+2+1):
-        comb = math.gamma(b+2+1) / (math.gamma(j+1) * math.gamma(b+2-j+1))
+    comb = 1.
+    for j in range(b+2+1):
+        # comb = math.gamma(b+2+1) / (math.gamma(j+1) * math.gamma(b+2-j+1))
+        if j > 0:
+            comb *= (b+2-j+1.) / j
         sum += 0.5*comb*_c_alpha_int(j+(a-b)/2, x)
     return sum
 
@@ -135,16 +150,20 @@ def _t_l_ab_vq_int(l, a, b, v12_star, q12_star):
     x1 = q1**2
     x2 = q2**2
     sum = 0.
+    k_start = l%2
+    term_k = (math.gamma(0.5*(k_start+1+l)) / math.gamma(0.5*(k_start+1-l))
+              * 2.**(l-k_start)/(math.gamma(k_start+1)*math.gamma(l-k_start+1)))
     for k in range(l%2, l+1, 2):
         # only terms with (l-k)%2==0 contribute to the sum:
-        term_k = 2.**(l-k) * math.gamma(0.5*(k+1+l)) / math.gamma(0.5*(k+1-l))
-        term_k /= (math.gamma(k+1)*math.gamma(l-k+1))
+        # term_k = 2.**(l-k) * math.gamma(0.5*(k+1+l)) / math.gamma(0.5*(k+1-l))
+        # term_k /= (math.gamma(k+1)*math.gamma(l-k+1))
         termQ = (_b_nk_int(a, k, x2) - _b_nk_int(a, k, x1))
         if k==b+2:
             termV = math.log(v2/v1)
         else:
             termV = (v2**(b+2-k) - v1**(b+2-k)) / (b+2-k)
         sum += termV*term_k*termQ
+        term_k *= -(l-k)*(l+k+1) / (4.*(k+1)*(k+2))
     return sum
 
 
@@ -162,9 +181,12 @@ def _u_l_ab_vq_int(l, a, b, v2_star, q12_star):
     x1 = q1**2
     x2 = q2**2
     sum = 0.
+    k_start = l%2
+    term_k = (math.gamma(0.5*(k_start+1+l)) / math.gamma(0.5*(k_start+1-l))
+              * 2.**(l-k_start)/(math.gamma(k_start+1)*math.gamma(l-k_start+1)))
     for k in range(l%2, l+1, 2):
-        term_k = (math.gamma(0.5*(k+1+l)) / math.gamma(0.5*(k+1-l))
-                  * 2.**(l-k)/(math.gamma(k+1) * math.gamma(l-k+1)))
+        # term_k = (math.gamma(0.5*(k+1+l)) / math.gamma(0.5*(k+1-l))
+        #           * 2.**(l-k)/(math.gamma(k+1) * math.gamma(l-k+1)))
         if k==b+2:
             term_x = (math.log(2.*v2)*(_b_nk_int(a, k, x2) - _b_nk_int(a, k, x1))
                       + _s_ab_int(a, b, x2) - _s_ab_int(a, b, x1))
@@ -173,6 +195,7 @@ def _u_l_ab_vq_int(l, a, b, v2_star, q12_star):
             t_x = (v2**(b+2-k)*(_b_nk_int(a, k, x2) - _b_nk_int(a, k, x1))
                    - 2.**(k-b-2)*(_b_nk_int(a, b+2, x2) - _b_nk_int(a, b+2, x1)))
             sum += term_k*t_x/(b+2-k)
+        term_k *= -(l-k)*(l+k+1) / (4.*(k+1)*(k+2))
     return sum
 
 

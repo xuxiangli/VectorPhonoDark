@@ -570,45 +570,102 @@ def get_G_eigenvectors_omega_from_q_XYZ(
     return G_XYZ_list, ph_eigenvectors, ph_omega
 
 
-def get_q_max(q_max, q_cut_option=False, 
-              phonon_file=None, atom_masses=None, 
-              verbose=True):
+# def get_q_max(q_max, q_cut_option=False, 
+#               phonon_file=None, atom_masses=None, 
+#               verbose=True):
+#     """
+#     Returns q_max based on input and Debye-Waller factor.
+
+#     Parameters
+#     ----------
+#     q_max : float
+#         The initial maximum momentum transfer.
+#     q_cut_option : bool, optional
+#         Whether to compute q_cut based on Debye-Waller factor (default is False).
+#     phonon_file : Phonopy object, optional
+#         The phonopy object containing the phonon data (required if q_cut_option is True).
+#     atom_masses : array-like, optional
+#         The masses of the atoms (required if q_cut_option is True).
+#     verbose : bool, optional
+#         Whether to print verbose output (default is True).
+
+#     Returns
+#     -------
+#     float
+#         The adjusted maximum momentum transfer q_max.
+#     """
+
+#     if q_cut_option:
+#         q_cut = compute_q_cut(phonon_file, atom_masses)
+#         if q_cut <= q_max:
+#             q_max = q_cut
+#             if verbose:
+#                 print(f"    Adjusted q_max to {q_max:.4f} eV due to Debye Waller factor.")
+#         else:
+#             if verbose:
+#                 print(f"    Using specified q_max = {q_max:.4f} eV.")
+#     else:
+#         if verbose:
+#             print(f"    Using specified q_max = {q_max:.4f} eV.")
+
+#     return q_max
+
+
+def get_q_max(material_input: str, factor: float = 10.0):
     """
-    Returns q_max based on input and Debye-Waller factor.
+    Get the maximum q value based on the Debye-Waller factor for the given material.
 
     Parameters
     ----------
-    q_max : float
-        The initial maximum momentum transfer.
-    q_cut_option : bool, optional
-        Whether to compute q_cut based on Debye-Waller factor (default is False).
-    phonon_file : Phonopy object, optional
-        The phonopy object containing the phonon data (required if q_cut_option is True).
-    atom_masses : array-like, optional
-        The masses of the atoms (required if q_cut_option is True).
-    verbose : bool, optional
-        Whether to print verbose output (default is True).
+    material_input : str
+        The file path to the material input file.
+    factor : float, optional
+        The multiplicative factor to scale the q cut (default is 10.0).
 
     Returns
     -------
     float
-        The adjusted maximum momentum transfer q_max.
+        The computed maximum q value.
     """
 
-    if q_cut_option:
-        q_cut = compute_q_cut(phonon_file, atom_masses)
-        if q_cut <= q_max:
-            q_max = q_cut
-            if verbose:
-                print(f"    Adjusted q_max to {q_max:.4f} eV due to Debye Waller factor.")
-        else:
-            if verbose:
-                print(f"    Using specified q_max = {q_max:.4f} eV.")
-    else:
-        if verbose:
-            print(f"    Using specified q_max = {q_max:.4f} eV.")
+    mat_input_mod_name = os.path.splitext(os.path.basename(material_input))[0]
+    mat_mod = utility.import_file(mat_input_mod_name, os.path.join(material_input))
+    material = mat_mod.material
 
-    return q_max
+    poscar_path = os.path.join(os.path.split(material_input)[0], "POSCAR")
+    force_sets_path = os.path.join(os.path.split(material_input)[0], "FORCE_SETS")
+    born_path = os.path.join(os.path.split(material_input)[0], "BORN")
+
+    if os.path.exists(born_path):
+        born_exists = True
+    else:
+        print(
+            "  There is no BORN file for "
+            + material
+            + ". PHONOPY calculations will process with .NAC. = FALSE\n"
+        )
+        born_exists = False
+
+    if born_exists:
+        phonon_file = phonopy.load(
+            supercell_matrix=mat_mod.mat_properties_dict["supercell_dim"],
+            primitive_matrix="auto",
+            unitcell_filename=poscar_path,
+            force_sets_filename=force_sets_path,
+            is_nac=True,
+            born_filename=born_path,
+        )
+    else:
+        phonon_file = phonopy.load(
+            supercell_matrix=mat_mod.mat_properties_dict["supercell_dim"],
+            primitive_matrix="auto",
+            unitcell_filename=poscar_path,
+            force_sets_filename=force_sets_path,
+        )
+
+    phonopy_params = get_phonon_file_data(phonon_file, born_exists)
+
+    return compute_q_cut(phonon_file, phonopy_params["atom_masses"], factor=factor)
 
 
 def calculate_W_tensor(phonon_file, num_atoms, atom_masses,

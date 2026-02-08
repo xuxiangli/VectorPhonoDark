@@ -1,9 +1,17 @@
 from numpy import float32
+import os
+from pathlib import Path
 from vectorphonodark import constants as const
 from vectorphonodark.projection import BinnedMcalI
 
-input_path = "/Users/jukcoeng/Desktop/Dark_Matter/Vector Space Integration/VectorPhonoDark/"
-output_path = "/Users/jukcoeng/Desktop/Dark_Matter/Vector Space Integration/VectorPhonoDark/output/"
+
+"""input starts here"""
+project_root = Path(__file__).resolve().parent.parent
+input_path = str(project_root) + "/"
+output_path = str(project_root / "output") + "/"
+
+if not os.path.exists(output_path):
+    os.makedirs(output_path)
 
 mass = 1*10**6
 q_max = 2 * mass * (const.VESC + const.VE)
@@ -16,7 +24,7 @@ nq_max = 2**9 - 1
 
 physics_params = {
     "fdm": (-2*f_med, 0),
-    # "q0_fdm": mass * const.V0,  # reference momentum transfer in eV
+    "q0_fdm": mass * const.V0,  # reference momentum transfer in eV
     "energy_threshold": 1e-3,  # eV
     "energy_bin_width": 1e-3,  # eV
     "mass_dm": mass,
@@ -37,10 +45,13 @@ file_params = {
     "hdf5_group": f"{mass/10**6}MeV/{physics_params['fdm']}_vsdm",
     "hdf5_data": "data",
 }
+"""input ends here"""
+
 params = {**physics_params, **numerics_params}
 
 binned_mcalI = BinnedMcalI(
-    physics_params=physics_params, numerics_params=numerics_params
+    physics_params=physics_params, 
+    numerics_params=numerics_params
 )
 binned_mcalI.project(verbose=True)
 binned_mcalI.export_hdf5(

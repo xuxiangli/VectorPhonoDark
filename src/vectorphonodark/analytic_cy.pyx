@@ -137,8 +137,11 @@ cdef double _b_nk_int(int n, int k, double x) noexcept nogil:
     cdef int j
     cdef double comb, ipower, summand
     
+    comb = 1.0
     for j in range(k + 1):
-        comb = gamma(k + 1.0) / (gamma(j + 1.0) * gamma(k - j + 1.0))
+        # comb = gamma(k + 1.0) / (gamma(j + 1.0) * gamma(k - j + 1.0))
+        if j > 0:
+            comb *= (k - j + 1.0) / j
         ipower = j + (n - k)/2.0 + 1.0
         
         if ipower == 0:
@@ -151,7 +154,7 @@ cdef double _b_nk_int(int n, int k, double x) noexcept nogil:
 
 # @cython.nogil
 cdef double _c_alpha_int(double alpha, double x) noexcept nogil:
-    cdef double val, yx, sum_val, comb
+    cdef double val, yx, sum_val, comb, comb_alpha_j
     cdef int j
     cdef int alpha_int
     
@@ -175,21 +178,27 @@ cdef double _c_alpha_int(double alpha, double x) noexcept nogil:
         return (0.125 * x - 0.5) * x + 0.5 * log(1.0 + x)
     elif alpha_int > 1:
         sum_val = pow(-1.0, alpha_int) * log(1.0 + x) / alpha + pow(1.0 + x, alpha_int) / (2.0 * alpha * alpha)
+        comb_alpha_j = alpha
         for j in range(1, alpha_int):
-            comb = (
-                gamma(alpha + 1.0) / (gamma(j + 1.0) * gamma(alpha - j + 1.0))
-                + gamma(alpha) / (gamma(j + 1.0) * gamma(alpha - j))
-            )
+            # comb = (
+            #     gamma(alpha + 1.0) / (gamma(j + 1.0) * gamma(alpha - j + 1.0))
+            #     + gamma(alpha) / (gamma(j + 1.0) * gamma(alpha - j))
+            # )
+            comb = comb_alpha_j * (2.0 * alpha - j) / j
+            comb_alpha_j *= (alpha - j) / (j + 1.0)
             sum_val += pow(-1.0, alpha_int - j) / (2.0 * alpha * j) * comb * pow(1.0 + x, j)
         return sum_val
     elif alpha_int < -1:
         yx = (1.0 + x) / x
         sum_val = pow(-1.0, alpha_int) * log(yx) / alpha - pow(yx, -alpha_int) / (2.0 * alpha * alpha)
+        comb_alpha_j = -alpha
         for j in range(1, -alpha_int):
-            comb = (
-                gamma(-alpha + 1.0) / (gamma(j + 1.0) * gamma(-alpha - j + 1.0))
-                + gamma(-alpha) / (gamma(j + 1.0) * gamma(-alpha - j))
-            )
+            # comb = (
+            #     gamma(-alpha + 1.0) / (gamma(j + 1.0) * gamma(-alpha - j + 1.0))
+            #     + gamma(-alpha) / (gamma(j + 1.0) * gamma(-alpha - j))
+            # )
+            comb = comb_alpha_j * (-2.0 * alpha - j) / j
+            comb_alpha_j *= (-alpha - j) / (j + 1.0)
             sum_val += pow(-1.0, alpha_int + j) / (2.0 * alpha * j) * comb * pow(yx, j)
         return sum_val
     return 0.0
@@ -201,8 +210,11 @@ cdef double _v_ab_int(int a, int b, double x) noexcept nogil:
     cdef double comb
     b_int = <int>b
     
+    comb = 1.0
     for j in range(b_int + 3):
-        comb = gamma(b + 3.0) / (gamma(j + 1.0) * gamma(b + 3.0 - j))
+        # comb = gamma(b + 3.0) / (gamma(j + 1.0) * gamma(b + 3.0 - j))
+        if j > 0:
+            comb *= (b + 3.0 - j) / j
         if 2 * j == (b - a):
             sum_2 += comb * log(x)
         else:
@@ -217,8 +229,11 @@ cdef double _s_ab_int(int a, int b, double x) noexcept nogil:
     cdef double comb
     b_int = <int>b
     
+    comb = 1.0
     for j in range(b_int + 3):
-        comb = gamma(b + 3.0) / (gamma(j + 1.0) * gamma(b + 3.0 - j))
+        # comb = gamma(b + 3.0) / (gamma(j + 1.0) * gamma(b + 3.0 - j))
+        if j > 0:
+            comb *= (b + 3.0 - j) / j
         sum_val += 0.5 * comb * _c_alpha_int(j + (a - b) / 2.0, x)
     return sum_val
 
@@ -229,11 +244,16 @@ cdef double _t_l_ab_vq_int(int l, int a, int b, double v1, double v2, double q1,
     cdef double sum_val = 0.0
     cdef int k
     cdef double term_k, termQ, termV
+    cdef double k_start
     
+    k_start = l % 2
+    term_k = (gamma(0.5 * (k_start + 1 + l)) / gamma(0.5 * (k_start + 1 - l))
+              * pow(2.0, l - k_start) 
+              / (gamma(k_start + 1.0) * gamma(l - k_start + 1.0)))
     # Range step 2
     for k in range(l % 2, l + 1, 2):
-        term_k = pow(2.0, l - k) * gamma(0.5 * (k + 1 + l)) / gamma(0.5 * (k + 1 - l))
-        term_k /= (gamma(k + 1.0) * gamma(l - k + 1.0))
+        # term_k = pow(2.0, l - k) * gamma(0.5 * (k + 1 + l)) / gamma(0.5 * (k + 1 - l))
+        # term_k /= (gamma(k + 1.0) * gamma(l - k + 1.0))
         
         termQ = (_b_nk_int(a, k, x2) - _b_nk_int(a, k, x1))
         
@@ -242,6 +262,8 @@ cdef double _t_l_ab_vq_int(int l, int a, int b, double v1, double v2, double q1,
         else:
             termV = (pow(v2, b + 2 - k) - pow(v1, b + 2 - k)) / (b + 2.0 - k)
         sum_val += termV * term_k * termQ
+
+        term_k *= -(l - k) * (l + k + 1) / (4.0 * (k + 1) * (k + 2))
     return sum_val
 
 # @cython.nogil
@@ -251,10 +273,16 @@ cdef double _u_l_ab_vq_int(int l, int a, int b, double v2, double q1, double q2)
     cdef double sum_val = 0.0
     cdef int k
     cdef double term_k, term_x, t_x
+    cdef double k_start
+    
+    k_start = l % 2
+    term_k = (gamma(0.5 * (k_start + 1 + l)) / gamma(0.5 * (k_start + 1 - l))
+              * pow(2.0, l - k_start) 
+              / (gamma(k_start + 1.0) * gamma(l - k_start + 1.0)))
     
     for k in range(l % 2, l + 1, 2):
-        term_k = (gamma(0.5 * (k + 1 + l)) / gamma(0.5 * (k + 1 - l))
-                  * pow(2.0, l - k) / (gamma(k + 1.0) * gamma(l - k + 1.0)))
+        # term_k = (gamma(0.5 * (k + 1 + l)) / gamma(0.5 * (k + 1 - l))
+        #           * pow(2.0, l - k) / (gamma(k + 1.0) * gamma(l - k + 1.0)))
         
         if k == b + 2:
             term_x = (log(2.0 * v2) * (_b_nk_int(a, k, x2) - _b_nk_int(a, k, x1))
@@ -264,6 +292,8 @@ cdef double _u_l_ab_vq_int(int l, int a, int b, double v2, double q1, double q2)
             t_x = (pow(v2, b + 2 - k) * (_b_nk_int(a, k, x2) - _b_nk_int(a, k, x1))
                    - pow(2.0, k - b - 2) * (_b_nk_int(a, b + 2, x2) - _b_nk_int(a, b + 2, x1)))
             sum_val += term_k * t_x / (b + 2.0 - k)
+
+        term_k *= -(l - k) * (l + k + 1) / (4.0 * (k + 1) * (k + 2))
     return sum_val
 
 # @cython.nogil

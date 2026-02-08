@@ -425,7 +425,7 @@ def proj_integrate_3d(
 
 
 @numba.njit
-def proj_get_f_nlm(
+def proj_get_f_lm_n(
     n_max: int,
     lm_list: list[tuple[int, int]],
     func_vals: np.ndarray,
@@ -468,7 +468,7 @@ def proj_get_f_nlm(
         corresponding f_nlm coefficients.
     """
 
-    f_nlm = {}
+    f_lm_n = np.zeros((len(lm_list), n_max + 1), dtype=np.float64)
 
     for n in numba.prange(n_max + 1):
 
@@ -486,26 +486,26 @@ def proj_get_f_nlm(
 
         # Perform integration
         if n == 0:
-            for l, m in lm_list:
-                f_nlm[(n, l, m)] = proj_integrate_3d(
+            for idx_lm, (l, m) in enumerate(lm_list):
+                f_lm_n[idx_lm, n] = proj_integrate_3d(
                     func_vals[r_min_idx:r_max_idx, :, :],
                     value[0],
                     y_lm_vals[(l, m)],
                     jacob_vals[r_min_idx:r_max_idx],
                 )
         else:
-            for l, m in lm_list:
-                f_nlm[(n, l, m)] = proj_integrate_3d(
+            for idx_lm, (l, m) in enumerate(lm_list):
+                f_lm_n[idx_lm, n] = proj_integrate_3d(
                     func_vals[r_min_idx:r_mid_idx, :, :],
                     value[0],
                     y_lm_vals[(l, m)],
                     jacob_vals[r_min_idx:r_mid_idx],
                 )
-                f_nlm[(n, l, m)] += proj_integrate_3d(
+                f_lm_n[idx_lm, n] += proj_integrate_3d(
                     func_vals[r_mid_idx:r_max_idx, :, :],
                     value[1],
                     y_lm_vals[(l, m)],
                     jacob_vals[r_mid_idx:r_max_idx],
                 )
 
-    return f_nlm
+    return f_lm_n
