@@ -397,9 +397,15 @@ class VDF(Fnlm):
             lm_list, v_max, n_a, n_b, n_c  # , p_a, p_b, p_c
         )
 
-        vdf_vals = np.array(
-            [vdf(v_vec, **vdf_params) for v_vec in v_xyz_list]
-        ).reshape(n_a, n_b, n_c)
+        try:
+            vdf_vals = vdf(v_xyz_list, **vdf_params)
+            if vdf_vals.size != n_a * n_b * n_c:
+                raise ValueError("Output size mismatch in vectorized vdf.")
+            vdf_vals = vdf_vals.reshape(n_a, n_b, n_c)
+        except (TypeError, ValueError, AttributeError, IndexError):
+            vdf_vals = np.array(
+                [vdf(v_vec, **vdf_params) for v_vec in v_xyz_list]
+            ).reshape(n_a, n_b, n_c)
         del v_xyz_list
 
         if verbose:
