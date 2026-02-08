@@ -3,7 +3,6 @@ import numba
 import sys
 import quaternionic
 from importlib import util
-from functools import reduce
 
 import vsdm
 
