@@ -126,42 +126,45 @@ class Rate:
         # get the mcalI object
         binnedmcalI = self._binnedmcalI(verbose=verbose)
 
-        binned_vecK = {}
         vecK_shape = (self.get_lmvmq_index(self.l_max, self.l_max, self.l_max) + 1,)
-        for idx_bin in range(self.n_bins):
+        binned_vecK = {idx_bin: np.zeros(vecK_shape, dtype=float) for idx_bin in range(self.n_bins)}
 
-            # get the minimum l_max and output shape
-            vecK = np.zeros(vecK_shape, dtype=float)
+        for l in range(0, self.l_max + 1, self.l_mod):
 
-            for l in range(0, self.l_max + 1, self.l_mod):
+            # --- Step A: Extract matrix V (VDF) ---
+            rows_v = [vdf.get_lm_index(l, mv) for mv in range(-l, l + 1)]
+            # shape: (2l+1, Nv)
+            V_sub = vdf.f_lm_n[rows_v][:, : self.nv_max + 1]
 
-                # --- Step A: Extract matrix I ---
+            # --- Step B: Extract matrix F indices (Form Factor) ---
+            # Assuming consistent indexing across bins, use the first available bin or recalculate if needed.
+            # If n_bins > 0, we can use the first bin's get_lm_index which should be consistent.
+            if self.n_bins > 0:
+                rows_q = [ff.fnlms[0].get_lm_index(l, mq) for mq in range(-l, l + 1)]
+            else:
+                rows_q = []
+
+            # --- Step C: Calculate target indices ---
+            target_indices = list(range(self.get_lmvmq_index(l, -l, -l),
+                                        self.get_lmvmq_index(l, l, l) + 1))
+
+            for idx_bin in range(self.n_bins):
+
+                # --- Step D: Extract matrix I ---
                 I_sub = binnedmcalI.mcalIs[idx_bin].mcalI[l]
 
-                # --- Step B: Extract matrix V (VDF) ---
-                rows_v = [vdf.get_lm_index(l, mv) for mv in range(-l, l + 1)]
-                # shape: (2l+1, Nv)
-                V_sub = vdf.f_lm_n[rows_v][:, : self.nv_max + 1]
-
-                # --- Step C: Extract matrix F (Form Factor) ---
-                rows_q = [ff.fnlms[idx_bin].get_lm_index(l, mq) for mq in range(-l, l + 1)]
+                # --- Step E: Extract matrix F (Form Factor) ---
                 # shape: (2l+1, Nq)
                 F_sub = ff.fnlms[idx_bin].f_lm_n[rows_q][:, : self.nq_max + 1]
 
-                # --- Step D: Core computation (matrix multiplication) ---
+                # --- Step F: Core computation (matrix multiplication) ---
                 # Mathematical formula: K = V * I * F^T
                 # Shape transformation: (2l+1, Nv) @ (Nv, Nq) @ (Nq, 2l+1)
                 # -> (2l+1, 2l+1) -> vecK shape
                 K_block = self.v_max**3 * V_sub @ I_sub @ F_sub.T
 
-                # --- Step E: Fill back results into vecK ---
-                # We need to calculate the corresponding flat indices in vecK
-                # Assume vecK is a flattened 1D array
-                target_indices = list(range(self.get_lmvmq_index(l, -l, -l), 
-                                            self.get_lmvmq_index(l, l, l) + 1))
-                vecK[target_indices] = K_block.flatten()
-
-            binned_vecK[idx_bin] = vecK
+                # --- Step G: Fill back results into vecK ---
+                binned_vecK[idx_bin][target_indices] = K_block.flatten()
 
         return binned_vecK
 
