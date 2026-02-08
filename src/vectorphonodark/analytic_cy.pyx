@@ -137,8 +137,11 @@ cdef double _b_nk_int(int n, int k, double x) noexcept nogil:
     cdef int j
     cdef double comb, ipower, summand
     
+    comb = 1.0
     for j in range(k + 1):
-        comb = gamma(k + 1.0) / (gamma(j + 1.0) * gamma(k - j + 1.0))
+        if j > 0:
+            comb = comb * (k - j + 1.0) / j
+
         ipower = j + (n - k)/2.0 + 1.0
         
         if ipower == 0:
