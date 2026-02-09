@@ -200,7 +200,7 @@ def _u_l_ab_vq_int(l, a, b, v2_star, q12_star):
 
 
 @numba.njit
-def mI_star(ell, fdm, v12_star, q12_star):
+def mI_star(ell, a, b, v12_star, q12_star):
     """Dimensionless integral related to MathcalI.
 
     fdm: label specifying the form factor type.
@@ -221,7 +221,6 @@ def mI_star(ell, fdm, v12_star, q12_star):
         R1 and R3 are not rectangular: vMin(q) < v < v2. -> _u_l_ab_vq_int
     If vmin(q) > v1 for all q1 < q < q2, then mcalI is given by _u_l_ab_vq_int
     """
-    (a, b) = fdm
     [v1,v2] = v12_star
     [q1,q2] = q12_star
     if v1==v2 or q1==q2:
@@ -274,8 +273,7 @@ def mI_star(ell, fdm, v12_star, q12_star):
 
 @numba.njit
 def ilvq_analytic(lnvq, v_max, q_max, log_wavelet_q, eps_q, 
-                  fdm, q0_fdm, v0_fdm,
-                  mass_dm, mass_sm, energy, verbose=False):
+                  a, b, qStar, vStar, factor):
     """
     Compute I_l(nv,nq) analytically for given wavelet indices.
     
@@ -291,21 +289,16 @@ def ilvq_analytic(lnvq, v_max, q_max, log_wavelet_q, eps_q,
         Whether momentum wavelets are log-spaced.
     eps_q : float
         Minimum momentum fraction for log-spaced wavelets.
-    fdm : tuple
+    a : float
+    b : float
         Dark matter form factor parameters (a,b) with
-        F_DM(q,v) = (q/q0)**a * (v/v0)**b
-    q0_fdm : float
-        Reference momentum for form factor in eV.
-    v0_fdm : float
-        Reference velocity for form factor (dimensionless).
-    mass_dm : float
-        Dark matter mass in eV.
-    mass_sm : float
-        Standard model target mass in eV.
-    energy : float
-        Energy transfer in eV.
-    verbose : bool, optional
-        Whether to print verbose output. Default is False.  
+        F_DM(q,v) = (q/q0_fdm)**a * (v/v0_fdm)**b
+    qStar : float
+        Characteristic momentum scale q_star = sqrt(2*mass_dm*energy).
+    vStar : float
+        Characteristic velocity scale v_star = q_star/mass_dm.
+    factor : float
+        Overall prefactor for I_l(nv,nq) to get mcalI.
 
     Returns
     -------
@@ -314,18 +307,7 @@ def ilvq_analytic(lnvq, v_max, q_max, log_wavelet_q, eps_q,
     """
     
     (ell, nv, nq) = lnvq
-    (a, b) = fdm
-    mass_reduced = (mass_dm * mass_sm) / (mass_dm + mass_sm)
 
-    # Integrand is written in terms of dimensionless vStar and qStar:
-    qStar = np.sqrt(2*mass_dm*energy)
-    vStar = qStar/mass_dm
-
-    factor = (
-        (q_max/v_max)**3 / (2*mass_dm*mass_reduced**2) 
-        * (2*energy/(q_max*v_max))**2
-        * (qStar/q0_fdm)**a * (vStar/v0_fdm)**b
-    )
     n_regions = [1,1]
 
     v1, v2, v3 = basis_funcs.haar_support(nv)
@@ -358,18 +340,18 @@ def ilvq_analytic(lnvq, v_max, q_max, log_wavelet_q, eps_q,
     # There is always an A_v A_q term:
     v12_star = [v1/vStar, v2/vStar]
     q12_star = [q1/qStar, q2/qStar]
-    term_AA = A_v*A_q * mI_star(ell, fdm, v12_star, q12_star)
+    term_AA = A_v*A_q * mI_star(ell, a, b, v12_star, q12_star)
 
     # There are only B-type contributions if V or Q uses wavelets
     term_AB, term_BA, term_BB = 0., 0., 0.
     if n_regions[0]==2:
         v23_star = [v2/vStar, v3/vStar]
-        term_BA = B_v*A_q * mI_star(ell, fdm, v23_star, q12_star)
+        term_BA = B_v*A_q * mI_star(ell, a, b, v23_star, q12_star)
     if n_regions[1]==2:
         q23_star = [q2/qStar, q3/qStar]
-        term_AB = A_v*B_q * mI_star(ell, fdm, v12_star, q23_star)
+        term_AB = A_v*B_q * mI_star(ell, a, b, v12_star, q23_star)
     if n_regions==[2,2]:
-        term_BB = B_v*B_q * mI_star(ell, fdm, v23_star, q23_star)
+        term_BB = B_v*B_q * mI_star(ell, a, b, v23_star, q23_star)
     Ilvq = factor * (term_AA + term_BA + term_AB + term_BB)
 
     return Ilvq
@@ -405,8 +387,7 @@ def ilvq_analytic(lnvq, v_max, q_max, log_wavelet_q, eps_q,
 @numba.njit(parallel=True)
 def ilvq(l_max, l_mod, nv_max, nq_max, 
          v_max, q_max, log_wavelet_q, eps_q, 
-         fdm, q0_fdm, v0_fdm,
-         mass_dm, mass_sm, energy, verbose=False):
+         a, b, qStar, vStar, factor):
     """
     Compute I_l(nv,nq) for all l in [0,l_max], nv in [0,nv_max], nq in [0,nq_max].
 
@@ -428,21 +409,16 @@ def ilvq(l_max, l_mod, nv_max, nq_max,
         Whether the q wavelets are log-spaced.
     eps_q : float
         Minimum q/q_max value for log-spaced q wavelets.
-    fdm : tuple
+    a : float
+    b : float
         Dark matter form factor parameters (a,b) with
-        F_DM(q,v) = (q/q0)**a * (v/v0)**b
-    q0_fdm : float
-        Reference momentum transfer for form factor.
-    v0_fdm : float
-        Reference velocity for form factor.
-    mass_dm : float
-        Dark matter mass.
-    mass_sm : float
-        Standard model target mass.
-    energy : float
-        Energy transfer.
-    verbose : bool, optional
-        Whether to print verbose output, by default False.
+        F_DM(q,v) = (q/q0_fdm)**a * (v/v0_fdm)**b
+    qStar : float
+        Characteristic momentum scale q_star = sqrt(2*mass_dm*energy).
+    vStar : float
+        Characteristic velocity scale v_star = q_star/mass_dm.
+    factor : float
+        Overall prefactor for I_l(nv,nq) to get mcalI.
 
     Returns
     -------
@@ -453,13 +429,12 @@ def ilvq(l_max, l_mod, nv_max, nq_max,
     shape = (l_max//l_mod + 1, nv_max + 1, nq_max + 1)
     ilvq_array = np.zeros(shape, dtype=float)
     
-    for ell in numba.prange(0, l_max + 1, l_mod):
+    for idx_ell in numba.prange(0, l_max//l_mod + 1):
         for nv in range(nv_max + 1):
             for nq in range(nq_max + 1):
-                lnvq = (ell, nv, nq)
-                ilvq_array[ell//l_mod, nv, nq] = ilvq_analytic(
+                lnvq = (idx_ell*l_mod, nv, nq)
+                ilvq_array[idx_ell, nv, nq] = ilvq_analytic(
                     lnvq, v_max, q_max, log_wavelet_q, eps_q,
-                    fdm, q0_fdm, v0_fdm,
-                    mass_dm, mass_sm, energy, verbose=verbose
+                    a, b, qStar, vStar, factor
                 )
     return ilvq_array

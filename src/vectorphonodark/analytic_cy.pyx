@@ -353,18 +353,8 @@ cdef double mI_star(int ell, int a, int b, double v1, double v2, double q1, doub
 cdef double ilvq_analytic_c(int ell, int nv, int nq, 
                             double v_max, double q_max, 
                             int log_wavelet_q, double eps_q, 
-                            int a, int b, double q0_fdm, double v0_fdm,
-                            double mass_dm, double mass_sm, double energy) noexcept nogil:
-    
-    cdef double mass_reduced = (mass_dm * mass_sm) / (mass_dm + mass_sm)
-    cdef double qStar = sqrt(2.0 * mass_dm * energy)
-    cdef double vStar = qStar / mass_dm
-    
-    cdef double factor = (
-        pow(q_max / v_max, 3) / (2.0 * mass_dm * pow(mass_reduced, 2))
-        * pow(2.0 * energy / (q_max * v_max), 2)
-        * pow(qStar / q0_fdm, <double>a) * pow(vStar / v0_fdm, <double>b)
-    )
+                            int a, int b,
+                            double qStar, double vStar, double factor) noexcept nogil:
     
     cdef int n_regions_0 = 1
     cdef int n_regions_1 = 1
@@ -473,13 +463,11 @@ def ilvq_analytic(int ell,
                   double q_max, 
                   int log_wavelet_q, 
                   double eps_q, 
-                  tuple fdm, 
-                  double q0_fdm, 
-                  double v0_fdm,
-                  double mass_dm, 
-                  double mass_sm, 
-                  double energy, 
-                  int verbose=0):
+                  int a, 
+                  int b,
+                  double qStar,
+                  double vStar,
+                  double factor):
     """
     Compute I_l(nv,nq) analytically for given wavelet indices.
     
@@ -499,21 +487,16 @@ def ilvq_analytic(int ell,
         Whether momentum wavelets are log-spaced.
     eps_q : float
         Minimum momentum fraction for log-spaced wavelets.
-    fdm : tuple
+    a : float
+    b : float
         Dark matter form factor parameters (a,b) with
-        F_DM(q,v) = (q/q0)**a * (v/v0)**b
-    q0_fdm : float
-        Reference momentum for form factor in eV.
-    v0_fdm : float
-        Reference velocity for form factor (dimensionless).
-    mass_dm : float
-        Dark matter mass in eV.
-    mass_sm : float
-        Standard model target mass in eV.
-    energy : float
-        Energy transfer in eV.
-    verbose : bool, optional
-        Whether to print verbose output. Default is False.  
+        F_DM(q,v) = (q/q0_fdm)**a * (v/v0_fdm)**b
+    qStar : float
+        Characteristic momentum scale q_star = sqrt(2*mass_dm*energy).
+    vStar : float
+        Characteristic velocity scale v_star = q_star/mass_dm.
+    factor : float
+        Overall prefactor for I_l(nv,nq) to get mcalI.
 
     Returns
     -------
@@ -521,17 +504,13 @@ def ilvq_analytic(int ell,
         The computed I_l(nv,nq) value.
     """
 
-    cdef int a = fdm[0]
-    cdef int b = fdm[1]
-
     cdef double ilvq
     
     with cython.nogil:
         ilvq = ilvq_analytic_c(
             ell, nv, nq,
             v_max, q_max, log_wavelet_q, eps_q,
-            a, b, q0_fdm, v0_fdm,
-            mass_dm, mass_sm, energy
+            a, b, qStar, vStar, factor
         )
     
     return ilvq
@@ -544,13 +523,11 @@ def ilvq(int l_max,
          double q_max, 
          int log_wavelet_q, 
          double eps_q, 
-         tuple fdm, 
-         double q0_fdm, 
-         double v0_fdm,
-         double mass_dm, 
-         double mass_sm, 
-         double energy, 
-         int verbose=0):
+         int a, 
+         int b,
+         double qStar,
+         double vStar,
+         double factor):
     """
     Compute I_l(nv,nq) for all l in [0,l_max], nv in [0,nv_max], nq in [0,nq_max].
 
@@ -572,21 +549,16 @@ def ilvq(int l_max,
         Whether the q wavelets are log-spaced.
     eps_q : float
         Minimum q/q_max value for log-spaced q wavelets.
-    fdm : tuple
+    a : int
+    b : int
         Dark matter form factor parameters (a,b) with
-        F_DM(q,v) = (q/q0)**a * (v/v0)**b
-    q0_fdm : float
-        Reference momentum transfer for form factor.
-    v0_fdm : float
-        Reference velocity for form factor.
-    mass_dm : float
-        Dark matter mass.
-    mass_sm : float
-        Standard model target mass.
-    energy : float
-        Energy transfer.
-    verbose : bool, optional
-        Whether to print verbose output, by default False.
+        F_DM(q,v) = (q/q0_fdm)**a * (v/v0_fdm)**b
+    qStar : float
+        Characteristic momentum scale q_star = sqrt(2*mass_dm*energy).
+    vStar : float
+        Characteristic velocity scale v_star = q_star/mass_dm.
+    factor : float
+        Overall prefactor for I_l(nv,nq) to get mcalI.
 
     Returns
     -------
@@ -596,8 +568,6 @@ def ilvq(int l_max,
     
     cdef int n_nv = nv_max + 1
     cdef int n_nq = nq_max + 1
-    cdef int a = fdm[0]
-    cdef int b = fdm[1]
     
     # Create output numpy array
     cdef cnp.ndarray[double, ndim=3] ilvq_array = np.zeros((l_max//l_mod + 1, n_nv, n_nq), dtype=np.float64)
@@ -615,8 +585,7 @@ def ilvq(int l_max,
                     ilvq_view[ell, nv, nq] = ilvq_analytic_c(
                         ell*l_mod, nv, nq,
                         v_max, q_max, log_wavelet_q, eps_q,
-                        a, b, q0_fdm, v0_fdm,
-                        mass_dm, mass_sm, energy
+                        a, b, qStar, vStar, factor
                     )
     
     return ilvq_array

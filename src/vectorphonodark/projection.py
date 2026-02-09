@@ -827,9 +827,9 @@ class McalI:
 
         # Projection
         # for l in range(0, l_max + 1, l_mod):
-        #     for idx_nv, nv in enumerate(nv_list):
-        #         for idx_nq, nq in enumerate(nq_list):
-        #             self.mcalI[l, idx_nv, idx_nq] = self.getI_lvq_analytic((l, nv, nq))
+        #     for nv in range(nv_max + 1):
+        #         for nq in range(nq_max + 1):
+        #             self.mcalI[l//l_mod, nv, nq] = self.getI_lvq_vsdm((l, nv, nq))
         self.mcalI = self.get_mcalI(l_max, l_mod, nv_max, nq_max)
 
         if verbose:
@@ -837,20 +837,12 @@ class McalI:
             end_time = time.time()
             print(f"    Total projection time: {end_time - start_time:.2f} seconds.")
 
-    def getI_lvq_analytic(self, lnvq, verbose=False):
-        """Analytic calculation for I(ell) matrix coefficients.
-
-        Only available for 'tophat' and 'wavelet' bases (so far).
-
-        Arguments:
-            lnvq = (ell, nv, nq)
-            verbose: whether to print output
-        """
+    def getI_lvq_vsdm(self, lnvq, verbose=False):
+        
         v_max = self.v_max
         q_max = self.q_max
         mass_dm = self.mass_dm
         fdm = self.fdm  # DM-SM scattering form factor index
-        # (a, b) = fdm
         q0_fdm = self.q0_fdm  # reference momentum for FDM form factor
         v0_fdm = 1.0  # reference velocity for FDM form factor
         mass_sm = self.mass_sm  # SM particle mass (mElec)
@@ -858,17 +850,11 @@ class McalI:
         log_wavelet_q = self.log_wavelet_q
         eps_q = self.eps_q
 
-        Ilvq = analytic.ilvq_analytic(
+        Ilvq = analytic.ilvq_vsdm(
             lnvq, v_max, q_max, log_wavelet_q, eps_q,
             fdm, q0_fdm, v0_fdm, 
             mass_dm, mass_sm, energy, verbose=verbose
         )
-
-        # Ilvq = analytic.ilvq_vsdm(
-        #     lnvq, v_max, q_max, log_wavelet_q, eps_q,
-        #     fdm, q0_fdm, v0_fdm, 
-        #     mass_dm, mass_sm, energy, verbose=verbose
-        # )
 
         return Ilvq
 
@@ -885,11 +871,20 @@ class McalI:
         log_wavelet_q = self.log_wavelet_q
         eps_q = self.eps_q
 
+        (a, b) = fdm
+        qStar = np.sqrt(2*mass_dm*energy)
+        vStar = qStar/mass_dm
+        mass_reduced_sq = (mass_dm * mass_sm)**2 / (mass_dm + mass_sm)**2
+        factor = (
+            (q_max/v_max)**3 / (2*mass_dm*mass_reduced_sq) 
+            * (2*energy/(q_max*v_max))**2
+            * (qStar/q0_fdm)**a * (vStar/v0_fdm)**b
+        )
+
         return analytic.ilvq(
             l_max, l_mod, nv_max, nq_max,
             v_max, q_max, log_wavelet_q, eps_q,
-            fdm, q0_fdm, v0_fdm, 
-            mass_dm, mass_sm, energy
+            a, b, qStar, vStar, factor
         )
 
 
