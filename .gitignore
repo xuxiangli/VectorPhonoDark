@@ -3,11 +3,12 @@
 
 # scripts, notebooks and output files
 # scripts/
-# notebooks/
+notebooks/
 *.ipynb
 output/
 *.csv
 *.hdf5
+log/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
@@ -213,6 +214,9 @@ cython_debug/
 #  refer to https://docs.cursor.com/context/ignore-files
 .cursorignore
 .cursorindexingignore
+
+# Claude
+.claude/
 
 # Marimo
 marimo/_static/

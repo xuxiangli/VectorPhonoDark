@@ -36,13 +36,15 @@ def import_all_form_factors(filename, groupname, dataname="data", verbose=True):
 
     with h5py.File(filename, "r") as h5f:
         if groupname in h5f:
+            if verbose:
+                print(f"    BinnedFnlm data read from {filename} in group {groupname}.")
             group = h5f[groupname]
             for key in group.keys():
                 ff = FormFactor().import_hdf5(
                     filename=filename,
                     groupname=groupname + "/" + key,
                     dataname=dataname,
-                    verbose=verbose,
+                    verbose=False,
                 )
                 q_max = ff.q_max
                 form_factors[q_max] = ff
@@ -123,6 +125,30 @@ class Rate:
         self.eps_q = ff.eps if self.log_wavelet_q else 1.0
 
         self.mcalKs = self._get_binned_vecK(vdf, ff, verbose=verbose)
+
+    def binned_mu_R(self, wG, verbose=False):
+
+        if self.l_mod != wG.lmod:
+            raise ValueError("l_mod of BinnedRate and wG do not match.")
+        
+        G_array = np.array(wG.G_array)
+        binned_muR = {}
+        for idx_bin, vecK in self.mcalKs.items():
+            l_max = min(self.l_max, wG.ellMax)
+            lmvmq_max = self.get_lmvmq_index(l_max, l_max, l_max)
+
+            binned_muR[idx_bin] = self.v_max**2 / self.q_max * (
+                G_array[:, 0 : lmvmq_max + 1] @ vecK[0 : lmvmq_max + 1]
+            )
+        return binned_muR
+
+    def get_lmvmq_index(self, l, mv, mq):
+        if self.l_mod == 2 and l % 2 != 0:
+            raise ValueError("l value does not satisfy l_mod=2 condition.")
+        if self.l_mod == 2:
+            return l*(4*l**2-6*l-1)//6 + (l+mv)*(2*l+1) + (l+mq)
+        else:
+            return l*(2*l-1)*(2*l+1)//3 + (l+mv)*(2*l+1) + (l+mq)
     
     def _binnedmcalI(self, verbose=False):
         physics_params = {
@@ -149,24 +175,6 @@ class Rate:
                                   numerics_params=numerics_params)
         binnedmcalI.project(verbose=verbose)
         return binnedmcalI
-
-    def binned_mu_R(self, wG, verbose=False):
-
-        if self.l_mod != wG.lmod:
-            raise ValueError("l_mod of BinnedRate and wG do not match.")
-        
-        G_array = np.array(wG.G_array)
-        binned_muR = {}
-        for idx_bin, vecK in self.mcalKs.items():
-            l_max = min(self.l_max, wG.ellMax)
-            lmvmq_max = self.get_lmvmq_index(l_max, l_max, l_max)
-
-            binned_muR[idx_bin] = (
-                self.v_max**2
-                / self.q_max
-                * (G_array[:, 0 : lmvmq_max + 1] @ vecK[0 : lmvmq_max + 1])
-            )
-        return binned_muR
 
     def _get_binned_vecK(self, vdf, ff, verbose=False):
 
@@ -217,11 +225,3 @@ class Rate:
             binned_vecK[idx_bin] = vecK
 
         return binned_vecK
-
-    def get_lmvmq_index(self, l, mv, mq):
-        if self.l_mod == 2 and l % 2 != 0:
-            raise ValueError("l value does not satisfy l_mod=2 condition.")
-        if self.l_mod == 2:
-            return l*(4*l**2-6*l-1)//6 + (l+mv)*(2*l+1) + (l+mq)
-        else:
-            return l*(2*l-1)*(2*l+1)//3 + (l+mv)*(2*l+1) + (l+mq)
