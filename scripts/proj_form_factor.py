@@ -32,11 +32,11 @@ def main():
     for q_max in q_max_list:
         physics_params = {
             "energy_threshold": 1e-3,   # eV; minimum detectable phonon energy
-            "energy_bin_width": 1e-4,   # eV; energy bin size for the spectrum
+            "energy_bin_width": 1e-3,   # eV; energy bin size for the spectrum
             # factor to multiply with Gamma point to get energy cutoff
             # default: 4.0
             "energy_max_factor": 1.2,
-            "model": "Al2O3_dark_photon_precise_width_1e_4",  # output label
+            "model": "Al2O3_dark_photon",  # output label
         }
         numerics_params = {
             "q_max": q_max,         # upper momentum cutoff in eV

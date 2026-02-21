@@ -66,7 +66,7 @@ def main():
         "n_grid": (512, 180, 180),   # (n_r, n_theta, n_phi) Monte Carlo grid
     }
     file_params = {
-        "hdf5": str(output_dir / "vdf_2.hdf5"),
+        "hdf5": str(output_dir / "vdf.hdf5"),
         "hdf5_group": f'{physics_params["model"]}/230_240_600',  # encodes grid size
         "hdf5_data": "data",
     }

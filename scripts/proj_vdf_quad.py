@@ -84,7 +84,7 @@ def main():
     vdf_quad = VDF(physics_params=physics_params, numerics_params=numerics_params)
     vdf_quad.project_quad(params=quad_params, verbose=True)
     vdf_quad.export_hdf5(
-        filename=str(output_dir / "vdf_quad_precise.hdf5"),
+        filename=str(output_dir / "vdf_quad.hdf5"),
         groupname=hdf5_group,
         dataname="data",
     )
