@@ -4,10 +4,13 @@ import os
 import csv
 import h5py
 
+# import vsdm
+
 from . import constants as const
 from . import utility
 from .utility import C_GREEN, C_CYAN, C_RESET
 from . import physics
+
 # from . import analytic
 try:
     from . import analytic_cy as analytic
@@ -20,19 +23,19 @@ class Fnlm:
     def __init__(self, l_max=-1, l_mod=1, n_max=-1, info=None):
         if l_mod not in [1, 2]:
             raise ValueError("l_mod must be either 1 (all l) or 2 (even l only).")
-        
+
         self.l_max = l_max
         self.l_mod = l_mod
         self.n_max = n_max
         self.info = {} if info is None else info
-        
+
         self.f_lm_n = np.array([])
 
     def get_lm_index(self, l, m):
         if abs(m) > l or l > self.l_max or l % self.l_mod != 0:
             raise ValueError("Invalid (l, m) values.")
         if self.l_mod == 2:
-            return l*(l-1)//2 + l + m
+            return l * (l - 1) // 2 + l + m
         else:
             return l**2 + l + m
 
@@ -50,8 +53,7 @@ class Fnlm:
             if makeHeader:
                 if write_info:
                     bparams = [r"#"] + [
-                        str(key) + ":" + str(value) 
-                        for key, value in self.info.items()
+                        str(key) + ":" + str(value) for key, value in self.info.items()
                     ]
                     writer.writerow(bparams)
                 header = [r"#n", "l", "m", "f_lm_n"]
@@ -110,7 +112,7 @@ class Fnlm:
 
         if verbose:
             print(f"    Fnlm data read from {C_GREEN}{filename}{C_RESET}.")
-        
+
         return self
 
     def export_hdf5(
@@ -168,7 +170,7 @@ class BinnedFnlm:
     def __init__(self, n_bins=0, l_max=-1, l_mod=1, n_max=-1, info=None):
         if l_mod not in [1, 2]:
             raise ValueError("l_mod must be either 1 (all l) or 2 (even l only).")
-        
+
         self.n_bins = n_bins
         self.l_max = l_max
         self.l_mod = l_mod
@@ -181,15 +183,15 @@ class BinnedFnlm:
         l_max_list = [fnlm.l_max for fnlm in self.fnlms.values()]
         if not all(l_max == self.l_max for l_max in l_max_list):
             raise ValueError("Inconsistent l_max among bins.")
-        
+
         l_mod_list = [fnlm.l_mod for fnlm in self.fnlms.values()]
         if not all(l_mod == self.l_mod for l_mod in l_mod_list):
             raise ValueError("Inconsistent l_mod among bins.")
-        
+
         n_max_list = [fnlm.n_max for fnlm in self.fnlms.values()]
         if not all(n_max == self.n_max for n_max in n_max_list):
             raise ValueError("Inconsistent n_max among bins.")
-        
+
     def export_csv(self, filename, write_info=True, verbose=True):
         if filename.endswith(".csv"):
             filename = filename[:-4]
@@ -288,7 +290,7 @@ class BinnedFnlm:
                     filename, f"{groupname}/bin_{idx_bin}", dataname, verbose=False
                 )
                 self.fnlms[idx_bin] = fnlm
-        
+
         self._check_consistency()
 
         if verbose:
@@ -310,14 +312,16 @@ class VDF(Fnlm):
         Physics parameters required for VDF projection.
             - vdf: the velocity distribution function.
             - vdf_params: parameters for the velocity distribution function.
-            - model: (optional) name of the VDF model.
+        Optional keys:
+            - model: name of the VDF model.
 
     numerics_params : dict or None
         Numerical parameters required for VDF projection.
             - v_max: reference velocity scale.
             - l_max: maximum angular momentum quantum number.
-            - l_mod: (optional) denotes parity of l values (1 for all, 2 for even only).
             - n_max: maximum radial quantum number.
+        Optional keys:
+            - l_mod: denotes parity of l values (1 for all, 2 for even only).
     """
 
     def __init__(self, physics_params=None, numerics_params=None):
@@ -359,7 +363,7 @@ class VDF(Fnlm):
                         setattr(self, key, float(self.info[key]))
             else:
                 raise KeyError(f"Key '{key}' not found in CSV info.")
-            
+
         return self
 
     def import_hdf5(self, filename, groupname, dataname="data", verbose=True):
@@ -375,10 +379,21 @@ class VDF(Fnlm):
                 setattr(self, key, self.info[key])
             else:
                 raise KeyError(f"Key '{key}' not found in HDF5 info.")
-        
+
         return self
 
     def project(self, params, verbose=True):
+        """
+        Project the VDF onto basis functions using Monte Carlo integration.
+        
+        Parameters
+        ----------
+        params : dict
+            Projection parameters. Required keys:
+                - n_grid: tuple of ints (n_a, n_b, n_c) for Monte Carlo grid size.
+        verbose : bool, optional
+            Whether to print progress information (default: True).
+        """
 
         if verbose:
             print(
@@ -403,7 +418,9 @@ class VDF(Fnlm):
                 print(f"    Using VDF model: {self.info['model']}")
             print(f"    Parameters for VDF: {vdf_params}")
             print(f"    Reference velocity v_max = {v_max:.2e}.")
-            print(f"    Projecting onto basis with l_max={l_max}, l_mod={l_mod}, n_max={n_max}.")
+            print(
+                f"    Projecting onto basis with l_max={l_max}, l_mod={l_mod}, n_max={n_max}."
+            )
             print(f"    Grid size: n_a={n_a}, n_b={n_b}, n_c={n_c}")
             print("\n    Generate grids and calculating form factor...")
             start_time = time.time()
@@ -414,21 +431,26 @@ class VDF(Fnlm):
             lm_list, v_max, n_a, n_b, n_c
         )
 
-        vdf_vals = np.array(
-            [vdf(v_vec, **vdf_params) for v_vec in v_xyz_list]
-        ).reshape(n_a, n_b, n_c)
+        vdf_vals = np.array([vdf(v_vec, **vdf_params) for v_vec in v_xyz_list]).reshape(
+            n_a, n_b, n_c
+        )
         del v_xyz_list
 
         if verbose:
             end_time = time.time()
-            print(f"    VDF calculation completed in "
-                  f"{end_time - start_time:.2f} seconds.")
+            print(
+                f"    VDF calculation completed in "
+                f"{end_time - start_time:.2f} seconds."
+            )
             print("\n    Projecting VDF onto basis functions...")
 
         # Project vdf onto basis functions
         self.f_lm_n = utility.proj_get_f_lm_n(
-            n_max=n_max, lm_list=lm_list,
-            func_vals=vdf_vals, y_lm_vals=y_lm_vals, jacob_vals=jacob_vals,
+            n_max=n_max,
+            lm_list=lm_list,
+            func_vals=vdf_vals,
+            y_lm_vals=y_lm_vals,
+            jacob_vals=jacob_vals,
             n_a=n_a,
         )
         del vdf_vals, y_lm_vals, jacob_vals
@@ -436,8 +458,114 @@ class VDF(Fnlm):
         if verbose:
             print("    Projection completed.")
             end_total_time = time.time()
-            print(f"    Total projection time: "
-                  f"{end_total_time - start_total_time:.2f} seconds.")
+            print(
+                f"    Total projection time: "
+                f"{end_total_time - start_total_time:.2f} seconds."
+            )
+
+
+    def project_quad(self, params, verbose=True):
+        """
+        Project VDF onto basis functions using Gauss-Legendre quadrature
+        for angular integration and ``scipy.integrate.quad`` for adaptive
+        radial integration.
+
+        This hybrid approach uses fixed-order Gauss-Legendre quadrature for
+        the smooth angular part (cos_theta, phi) and adaptive quadrature for
+        the radial part, which handles the VDF's sharp escape-velocity
+        cutoff well.
+
+        Parameters
+        ----------
+        params : dict
+            Projection parameters. Required keys:
+                - n_gl: int, number of Gauss-Legendre nodes for cos_theta.
+                - n_phi: int, number of uniform nodes for phi.
+            Optional keys:
+                - epsabs: float, absolute error for radial quad (default 1e-8).
+                - epsrel: float, relative error for radial quad (default 1e-8).
+                - limit: int, max subdivisions for radial quad (default 200).
+        verbose : bool, optional
+            Whether to print progress information (default: True).
+        """
+        if verbose:
+            print(
+                "\n    Starting quad-based projection of velocity distribution"
+                " function onto basis functions..."
+            )
+            start_total_time = time.time()
+
+        l_max = self.l_max
+        l_mod = self.l_mod
+        n_max = self.n_max
+
+        vdf_func = self.vdf
+        vdf_params = self.vdf_params
+        v_max = self.v_max
+
+        n_gl = params["n_gl"]
+        n_phi = params["n_phi"]
+        epsabs = params.get("epsabs", 1e-8)
+        epsrel = params.get("epsrel", 1e-8)
+        limit = params.get("limit", 200)
+
+        self.info["n_gl"] = n_gl
+        self.info["n_phi"] = n_phi
+
+        lm_list = [
+            (l, m) for l in range(0, l_max + 1, l_mod) for m in range(-l, l + 1)
+        ]
+
+        if verbose:
+            if "model" in self.info:
+                print(f"    Using VDF model: {self.info['model']}")
+            print(f"    Parameters for VDF: {vdf_params}")
+            print(f"    Reference velocity v_max = {v_max:.2e}.")
+            print(
+                f"    Projecting onto basis with l_max={l_max}, l_mod={l_mod},"
+                f" n_max={n_max}."
+            )
+            print(
+                f"    Angular quadrature: n_gl={n_gl} (Gauss-Legendre),"
+                f" n_phi={n_phi} (uniform)."
+            )
+            print(
+                f"    Radial quadrature: scipy.integrate.quad with"
+                f" epsabs={epsabs}, epsrel={epsrel}, limit={limit}."
+            )
+            print("\n    Precomputing spherical harmonics at quadrature nodes...")
+
+        hat_v, ylm_weighted, dphi = utility.gen_quad_angular_grid(
+            lm_list, n_gl, n_phi
+        )
+
+        if verbose:
+            print("    Precomputation done.")
+            print("\n    Projecting VDF onto basis functions...")
+
+        self.f_lm_n = utility.proj_get_f_lm_n_quad(
+            n_max=n_max,
+            lm_list=lm_list,
+            vdf_func=vdf_func,
+            vdf_params=vdf_params,
+            v_max=v_max,
+            hat_v=hat_v,
+            ylm_weighted=ylm_weighted,
+            dphi=dphi,
+            epsabs=epsabs,
+            epsrel=epsrel,
+            limit=limit,
+            verbose=verbose,
+        )
+        self.info["method"] = "quad"
+
+        if verbose:
+            print("\n    Quad-based projection completed.")
+            end_total_time = time.time()
+            print(
+                f"    Total projection time: "
+                f"{end_total_time - start_total_time:.2f} seconds."
+            )
 
 
 class FormFactor(BinnedFnlm):
@@ -450,16 +578,18 @@ class FormFactor(BinnedFnlm):
         Physics parameters required for Form Factor projection.
             - energy_threshold: minimum energy transfer.
             - energy_bin_width: width of each energy bin.
-            - energy_max_factor: (optional) factor to determine maximum energy.
-            - model: (optional) name of the Form Factor model.
+        Optional keys:
+            - energy_max_factor: factor to determine maximum energy.
+            - model: name of the Form Factor model.
 
     numerics_params : dict or None
         Numerical parameters required for Form Factor projection.
             - q_max: reference momentum scale.
             - l_max: maximum angular momentum quantum number.
-            - l_mod: (optional) denotes parity of l values (1 for all, 2 for even only).
             - n_max: maximum radial quantum number.
-            - log_wavelet: (optional) whether to use log wavelet mesh.
+        Optional keys:
+            - l_mod: denotes parity of l values (1 for all, 2 for even only).
+            - log_wavelet: whether to use log wavelet mesh. Default is False.
     """
 
     def __init__(self, physics_params=None, numerics_params=None):
@@ -508,7 +638,13 @@ class FormFactor(BinnedFnlm):
             if key in self.info:
                 match key:
                     case "log_wavelet":
-                        self.log_wavelet = self.info[key] in [True, "True", "true", "1", 1]
+                        self.log_wavelet = self.info[key] in [
+                            True,
+                            "True",
+                            "true",
+                            "1",
+                            1,
+                        ]
                     case _:
                         setattr(self, key, float(self.info[key]))
             else:
@@ -518,7 +654,7 @@ class FormFactor(BinnedFnlm):
                 self.eps = float(self.info["log_wavelet_eps"])
             else:
                 raise KeyError("Key 'log_wavelet_eps' not found in CSV info.")
-            
+
         return self
 
     def import_hdf5(self, filename, groupname, dataname="data", verbose=True):
@@ -537,7 +673,13 @@ class FormFactor(BinnedFnlm):
             if key in self.info:
                 match key:
                     case "log_wavelet":
-                        self.log_wavelet = self.info[key] in [True, "True", "true", "1", 1]
+                        self.log_wavelet = self.info[key] in [
+                            True,
+                            "True",
+                            "true",
+                            "1",
+                            1,
+                        ]
                     case _:
                         setattr(self, key, float(self.info[key]))
             else:
@@ -547,9 +689,9 @@ class FormFactor(BinnedFnlm):
                 self.eps = float(self.info["log_wavelet_eps"])
             else:
                 raise KeyError("Key 'log_wavelet_eps' not found in HDF5 info.")
-            
+
         return self
-        
+
     def project(self, params, verbose=False):
 
         if verbose:
@@ -558,7 +700,9 @@ class FormFactor(BinnedFnlm):
 
         # Phonon data
         phonon_file, phonopy_params, c_dict, n_DW_params = physics.get_material_data(
-            params["material_input"], params["physics_model_input"], params["numerics_input"]
+            params["material_input"],
+            params["physics_model_input"],
+            params["numerics_input"],
         )
 
         l_max = self.l_max
@@ -569,7 +713,7 @@ class FormFactor(BinnedFnlm):
         energy_bin_width = self.energy_bin_width
         energy_max_factor = self.energy_max_factor
         energy_max = physics.get_energy_max(phonon_file, factor=energy_max_factor)
-        energy_bin_num = int((energy_max-energy_threshold)/energy_bin_width)+1
+        energy_bin_num = int((energy_max - energy_threshold) / energy_bin_width) + 1
         self.n_bins = energy_bin_num
         self.info["n_bins"] = self.n_bins
 
@@ -587,10 +731,14 @@ class FormFactor(BinnedFnlm):
             else:
                 print(f"    Standard (power) wavelet basis in q.")
             print(f"    Reference momentum q_max = {q_max:.2e} eV.")
-            print(f"    Projecting onto basis with l_max={l_max}, l_mod={l_mod}, n_max={n_max}.")
+            print(
+                f"    Projecting onto basis with l_max={l_max}, l_mod={l_mod}, n_max={n_max}."
+            )
             print(f"    Grid size: n_a={n_a}, n_b={n_b}, n_c={n_c}")
-            print(f"    Energy bins: {energy_bin_num} bins from "
-                  f"{energy_threshold:.2e} eV to {energy_max:.2e} eV")
+            print(
+                f"    Energy bins: {energy_bin_num} bins from "
+                f"{energy_threshold:.2e} eV to {energy_max:.2e} eV"
+            )
 
             print("\n    Generate grids and calculating form factor...")
             start_time = time.time()
@@ -605,7 +753,7 @@ class FormFactor(BinnedFnlm):
                 lm_list=lm_list, u_max=q_max, n_a=n_a, n_b=n_b, n_c=n_c, eps=eps
             )
         else:
-            eps = 0.
+            eps = 0.0
             q_xyz_list, y_lm_vals, jacob_vals = utility.gen_mesh_ylm_jacob(
                 lm_list=lm_list, u_max=q_max, n_a=n_a, n_b=n_b, n_c=n_c
             )
@@ -625,8 +773,10 @@ class FormFactor(BinnedFnlm):
 
         if verbose:
             end_time = time.time()
-            print(f"    Form factor calculation completed in "
-                  f"{end_time - start_time:.2f} seconds.")
+            print(
+                f"    Form factor calculation completed in "
+                f"{end_time - start_time:.2f} seconds."
+            )
             print("\n    Projecting form factor onto basis functions...")
 
         # Project form factor onto basis functions
@@ -641,17 +791,23 @@ class FormFactor(BinnedFnlm):
                     print(f"      Projecting energy bin {i_bin}/{energy_bin_num-1}...")
 
             self.fnlms[i_bin].f_lm_n = utility.proj_get_f_lm_n(
-                n_max=n_max, lm_list=lm_list,
-                func_vals=form_factor_bin_vals[i_bin, :, :, :], 
-                y_lm_vals=y_lm_vals, jacob_vals=jacob_vals, n_a=n_a,
-                log_wavelet=log_wavelet, eps=eps
+                n_max=n_max,
+                lm_list=lm_list,
+                func_vals=form_factor_bin_vals[i_bin, :, :, :],
+                y_lm_vals=y_lm_vals,
+                jacob_vals=jacob_vals,
+                n_a=n_a,
+                log_wavelet=log_wavelet,
+                eps=eps,
             )
 
         if verbose:
             print("    Projection completed.")
             end_total_time = time.time()
-            print(f"    Total projection time: "
-                  f"{end_total_time - start_total_time:.2f} seconds.")
+            print(
+                f"    Total projection time: "
+                f"{end_total_time - start_total_time:.2f} seconds."
+            )
 
 
 class McalI:
@@ -664,23 +820,25 @@ class McalI:
         Physics parameters required for McalI projection.
             - fdm: tuple, Dark matter form factor parameters (a,b) with
                    F_DM(q,v) = (q/q0)**a * (v/v0)**b
-            - q0_fdm: (optional) reference momentum for FDM grid.
-                    default: Bohr momentum
             - energy: energy transfer.
             - mass_dm: dark matter mass.
-            - mass_sm: (optional) standard model particle mass.
+        Optional keys:
+            - q0_fdm: reference momentum for FDM grid. Default is Bohr momentum
+            - mass_sm: standard model particle mass.
 
     numerics_params : dict or None
         Numerical parameters required for McalI projection.
             - l_max: maximum angular momentum quantum number.
-            - l_mod: (optional) denotes parity of l values (1 for all, 2 for even only).
             - nv_max: maximum velocity radial quantum number.
             - nq_max: maximum momentum radial quantum number.
             - v_max: reference velocity scale.
             - q_max: reference momentum scale.
-            - log_wavelet_q: (optional) whether to use log wavelet mesh for q.
-            - eps_q: (optional) epsilon parameter for log wavelet mesh.
+        Optional keys:
+            - l_mod: denotes parity of l values (1 for all, 2 for even only).
+            - log_wavelet_q: whether to use log wavelet mesh for q. Default is False.
+            - eps_q: epsilon parameter for log wavelet mesh.
     """
+
     def __init__(self, physics_params=None, numerics_params=None):
         if physics_params is None:
             physics_params = {}
@@ -710,13 +868,19 @@ class McalI:
             raise ValueError("eps_q must be in (0, 1) for log wavelet basis in q.")
 
         self.mcalI = np.zeros(
-            (self.l_max//self.l_mod + 1, self.nv_max + 1, self.nq_max + 1), dtype=float
+            (self.l_max // self.l_mod + 1, self.nv_max + 1, self.nq_max + 1),
+            dtype=float,
         )
         self.info = {}
 
     def export_hdf5(
-        self, filename, groupname, dataname="data", 
-        write_info=True, verbose=True, dtype=np.float64
+        self,
+        filename,
+        groupname,
+        dataname="data",
+        write_info=True,
+        verbose=True,
+        dtype=np.float64,
     ):
         if not filename.endswith(".hdf5"):
             filename += ".hdf5"
@@ -748,8 +912,10 @@ class McalI:
                     dset.attrs[key] = value
 
         if verbose:
-            print(f"    McalI data written to {C_GREEN}{filename}{C_RESET} "
-                  f"in group {C_CYAN}{groupname}/{dataname}{C_RESET}.")
+            print(
+                f"    McalI data written to {C_GREEN}{filename}{C_RESET} "
+                f"in group {C_CYAN}{groupname}/{dataname}{C_RESET}."
+            )
 
     def import_hdf5(self, filename, groupname, dataname="data", verbose=True):
         if not filename.endswith(".hdf5"):
@@ -779,16 +945,17 @@ class McalI:
                     setattr(self, key, dset.attrs[key])
                 else:
                     raise KeyError(f"Key '{key}' not found in HDF5 attributes.")
-                
+
             self.info = {
-                key: dset.attrs[key] for key in dset.attrs 
-                if key not in keys_to_load
+                key: dset.attrs[key] for key in dset.attrs if key not in keys_to_load
             }
 
         if verbose:
-            print(f"    McalI data read from {C_GREEN}{filename}{C_RESET} "
-                  f"in group {C_CYAN}{groupname}/{dataname}{C_RESET}.")
-            
+            print(
+                f"    McalI data read from {C_GREEN}{filename}{C_RESET} "
+                f"in group {C_CYAN}{groupname}/{dataname}{C_RESET}."
+            )
+
         return self
 
     def project(self, verbose=False):
@@ -810,10 +977,14 @@ class McalI:
         mass_sm = self.mass_sm
         log_wavelet_q = self.log_wavelet_q
         eps_q = self.eps_q
-        
+
         if verbose:
-            print(f"    Using FDM form factor parameters: fdm={fdm}, q0_fdm={q0_fdm}, v0_fdm={1.0}.")
-            print(f"    Using DM and SM parameters: mass_dm={mass_dm:.2e} eV, mass_sm={mass_sm:.2e} eV, energy={energy:.2e} eV.")
+            print(
+                f"    Using FDM form factor parameters: fdm={fdm}, q0_fdm={q0_fdm}, v0_fdm={1.0}."
+            )
+            print(
+                f"    Using DM and SM parameters: mass_dm={mass_dm:.2e} eV, mass_sm={mass_sm:.2e} eV, energy={energy:.2e} eV."
+            )
             print(f"    Parameters for wavelets:")
             if log_wavelet_q:
                 print(f"    Log wavelet basis in q with eps_q={eps_q:.2e}.")
@@ -821,7 +992,9 @@ class McalI:
                 print(f"    Standard (power) wavelet basis in q.")
             print(f"    Reference velocity v_max = {v_max:.2e}.")
             print(f"    Reference momentum q_max = {q_max:.2e} eV.")
-            print(f"    Projecting onto basis with l_max={l_max}, l_mod={l_mod}, nv_max={nv_max}, nq_max={nq_max}.")
+            print(
+                f"    Projecting onto basis with l_max={l_max}, l_mod={l_mod}, nv_max={nv_max}, nq_max={nq_max}."
+            )
 
             print("\n    Calculating McalI matrix coefficients...")
 
@@ -838,7 +1011,7 @@ class McalI:
             print(f"    Total projection time: {end_time - start_time:.2f} seconds.")
 
     def getI_lvq_vsdm(self, lnvq, verbose=False):
-        
+
         v_max = self.v_max
         q_max = self.q_max
         mass_dm = self.mass_dm
@@ -851,9 +1024,18 @@ class McalI:
         eps_q = self.eps_q
 
         Ilvq = analytic.ilvq_vsdm(
-            lnvq, v_max, q_max, log_wavelet_q, eps_q,
-            fdm, q0_fdm, v0_fdm, 
-            mass_dm, mass_sm, energy, verbose=verbose
+            lnvq,
+            v_max,
+            q_max,
+            log_wavelet_q,
+            eps_q,
+            fdm,
+            q0_fdm,
+            v0_fdm,
+            mass_dm,
+            mass_sm,
+            energy,
+            verbose=verbose,
         )
 
         return Ilvq
@@ -872,19 +1054,31 @@ class McalI:
         eps_q = self.eps_q
 
         (a, b) = fdm
-        qStar = np.sqrt(2*mass_dm*energy)
-        vStar = qStar/mass_dm
-        mass_reduced_sq = (mass_dm * mass_sm)**2 / (mass_dm + mass_sm)**2
+        qStar = np.sqrt(2 * mass_dm * energy)
+        vStar = qStar / mass_dm
+        mass_reduced_sq = (mass_dm * mass_sm) ** 2 / (mass_dm + mass_sm) ** 2
         factor = (
-            (q_max/v_max)**3 / (2*mass_dm*mass_reduced_sq) 
-            * (2*energy/(q_max*v_max))**2
-            * (qStar/q0_fdm)**a * (vStar/v0_fdm)**b
+            q_max / v_max ** 5
+            / (2 * mass_dm * mass_reduced_sq)
+            * (2 * energy) ** 2
+            * (qStar / q0_fdm) ** a
+            * (vStar / v0_fdm) ** b
         )
 
         return analytic.ilvq(
-            l_max, l_mod, nv_max, nq_max,
-            v_max, q_max, log_wavelet_q, eps_q,
-            a, b, qStar, vStar, factor
+            l_max,
+            l_mod,
+            nv_max,
+            nq_max,
+            v_max,
+            q_max,
+            log_wavelet_q,
+            eps_q,
+            a,
+            b,
+            qStar,
+            vStar,
+            factor,
         )
 
 
@@ -898,25 +1092,27 @@ class BinnedMcalI:
         Physics parameters required for Binned McalI projection.
             - fdm: tuple, Dark matter form factor parameters (a,b) with
                    F_DM(q,v) = (q/q0)**a * (v/v0)**b
-            - q0_fdm: (optional) reference momentum for FDM grid.
-                    default: Bohr momentum
             - energy_threshold: minimum energy transfer.
             - energy_bin_width: width of each energy bin.
             - mass_dm: dark matter mass.
-            - mass_sm: (optional) standard model particle mass.
+        Optional keys:
+            - q0_fdm: reference momentum for FDM grid. Default is Bohr momentum
+            - mass_sm: standard model particle mass. Default is nucleon mass.
 
     numerics_params : dict or None
         Numerical parameters required for Binned McalI projection.
             - l_max: maximum angular momentum quantum number.
-            - l_mod: (optional) denotes parity of l values (1 for all, 2 for even only).
             - nv_max: maximum velocity radial quantum number.
             - nq_max: maximum momentum radial quantum number.
             - v_max: reference velocity scale.
             - q_max: reference momentum scale.
-            - n_bins: (optional) number of energy bins.
-            - log_wavelet_q: (optional) whether to use log wavelet mesh for q.
-            - eps_q: (optional) epsilon parameter for log wavelet mesh.
+            - n_bins: number of energy bins.
+        Optional keys:
+            - l_mod: denotes parity of l values (1 for all, 2 for even only).
+            - log_wavelet_q: whether to use log wavelet mesh for q. Default is False.
+            - eps_q: epsilon parameter for log wavelet mesh.
     """
+
     def __init__(self, physics_params=None, numerics_params=None):
         if physics_params is None:
             physics_params = {}
@@ -949,7 +1145,7 @@ class BinnedMcalI:
 
         self.mcalIs = {}  # to be filled after projection
         self.info = {}
-    
+
     def _check_consistency(self):
         for idx_bin, mcalI in self.mcalIs.items():
             if mcalI.l_max != self.l_max:
@@ -978,8 +1174,13 @@ class BinnedMcalI:
                 raise ValueError(f"Inconsistent eps_q in bin {idx_bin}.")
 
     def export_hdf5(
-        self, filename, groupname, dataname="data", 
-        write_sub_info=True, verbose=True, dtype=np.float64
+        self,
+        filename,
+        groupname,
+        dataname="data",
+        write_sub_info=True,
+        verbose=True,
+        dtype=np.float64,
     ):
         if not filename.endswith(".hdf5"):
             filename += ".hdf5"
@@ -1052,7 +1253,7 @@ class BinnedMcalI:
                     setattr(self, key, grp.attrs[key])
                 else:
                     raise KeyError(f"Key '{key}' not found in HDF5 attributes.")
-                
+
             self.info = {
                 key: grp.attrs[key] for key in grp.attrs if key not in keys_to_load
             }
@@ -1073,7 +1274,7 @@ class BinnedMcalI:
                 f"    BinnedMcalI data read from {C_GREEN}{filename}{C_RESET} "
                 f"in group {C_CYAN}{groupname}bin_*{C_RESET}.",
             )
-            
+
         return self
 
     def project(self, verbose=False):
@@ -1098,18 +1299,20 @@ class BinnedMcalI:
             "log_wavelet_q",
             "eps_q",
         ]
-        physics_params = {
-            key: self.__dict__[key] for key in physics_params_keys
-        }
-        numerics_params = {
-            key: self.__dict__[key] for key in numerics_params_keys
-        }
+        physics_params = {key: self.__dict__[key] for key in physics_params_keys}
+        numerics_params = {key: self.__dict__[key] for key in numerics_params_keys}
 
         if verbose:
-            print(f"    Using scaling parameters: fdm={self.fdm}, q0_fdm={self.q0_fdm:.2e} eV, v0_fdm={1.0}.")
-            print(f"    Using mass parameters: mass_dm={self.mass_dm:.2e} eV, mass_sm={self.mass_sm:.2e} eV")
+            print(
+                f"    Using scaling parameters: fdm={self.fdm}, q0_fdm={self.q0_fdm:.2e} eV, v0_fdm={1.0}."
+            )
+            print(
+                f"    Using mass parameters: mass_dm={self.mass_dm:.2e} eV, mass_sm={self.mass_sm:.2e} eV"
+            )
             print(f"    In total {self.n_bins} energy bins starting from")
-            print(f"    energy_threshold={self.energy_threshold:.2e} eV with energy_bin_width={self.energy_bin_width:.2e} eV.\n")
+            print(
+                f"    energy_threshold={self.energy_threshold:.2e} eV with energy_bin_width={self.energy_bin_width:.2e} eV.\n"
+            )
             print(f"    Parameters for wavelets:")
             if self.log_wavelet_q:
                 print(f"    Log wavelet basis in q with eps_q={self.eps_q:.2e}.")
@@ -1117,7 +1320,9 @@ class BinnedMcalI:
                 print(f"    Standard (linear) wavelet basis in q.")
             print(f"    Reference velocity v_max = {self.v_max:.2e}.")
             print(f"    Reference momentum q_max = {self.q_max:.2e} eV.")
-            print(f"    Projecting onto basis with l_max={self.l_max}, nv_max={self.nv_max}, nq_max={self.nq_max}.")
+            print(
+                f"    Projecting onto basis with l_max={self.l_max}, nv_max={self.nv_max}, nq_max={self.nq_max}."
+            )
 
             print("\n    Calculating McalI matrix coefficients...")
 
@@ -1128,10 +1333,7 @@ class BinnedMcalI:
                 if idx_bin % (n_bins // 5 + 1) == 0:
                     print(f"        Projecting energy bin {idx_bin}/{n_bins-1}...")
 
-            energy = (
-                self.energy_threshold
-                + (idx_bin + 0.5) * self.energy_bin_width
-            )
+            energy = self.energy_threshold + (idx_bin + 0.5) * self.energy_bin_width
             physics_params["energy"] = energy
 
             mcalI = McalI(physics_params, numerics_params)

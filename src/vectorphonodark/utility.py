@@ -3,7 +3,6 @@ import numba
 import sys
 import quaternionic
 from importlib import util
-# from functools import reduce
 
 import vsdm
 
@@ -53,13 +52,13 @@ def sph_to_cart(vec_sph) -> np.ndarray:
     Parameters
     ----------
     vec_sph : np.ndarray
-        An array of shape (..., 3) representing points in spherical coordinates 
+        An array of shape (..., 3) representing points in spherical coordinates
         (r, theta, phi).
 
     Returns
     -------
     np.ndarray
-        An array of shape (..., 3) representing points in Cartesian coordinates 
+        An array of shape (..., 3) representing points in Cartesian coordinates
         (x, y, z).
     """
     r = vec_sph[..., 0]
@@ -73,46 +72,6 @@ def sph_to_cart(vec_sph) -> np.ndarray:
     return np.stack((x, y, z), axis=-1)
 
 
-# def get_intersection_index(base=None, **lists):
-#     """
-#     Get the indices of common elements in multiple lists.
-
-#     If `base` is provided, it is used as the reference list to find common elements.
-#     Otherwise, the first list in `lists` is used as the reference.
-
-#     Parameters
-#     ----------
-#     base : list, optional
-#         The base list to compare against.
-#     **lists : dict
-#         Arbitrary number of lists to find common elements with.
-
-#     Returns
-#     -------
-#     np.ndarray
-#         Array of indices in each list corresponding to the common elements.
-#             shape: (number of lists, number of common elements)
-#     """
-#     arrays = [np.asarray(l) for l in lists.values()]
-#     base_arr = np.asarray(base) if base is not None else np.array([])
-#     if base_arr.size > 0:
-#         arrays.insert(0, base_arr)
-
-#     if not arrays:
-#         return np.array([])
-
-#     common_elements = reduce(np.intersect1d, arrays)
-
-#     if common_elements.size == 0:
-#         return np.empty((len(lists), 0), dtype=int)
-
-#     target_arrays = [np.asarray(l) for l in lists.values()]
-#     indices = np.vstack(
-#         [np.searchsorted(arr, common_elements) for arr in target_arrays]
-#     )
-#     return indices
-
-
 def getQ(theta, phi):
     """
     Get quaternionic representation of rotation given by Euler angles (theta, phi).
@@ -124,7 +83,40 @@ def getQ(theta, phi):
     qi = np.sin(axR) * np.cos(axisphi)
     qj = np.sin(axR) * np.sin(axisphi)
     qk = 0.0
-    return quaternionic.array(qr, qi, qj, qk)
+    return 1 / quaternionic.array(qr, qi, qj, qk)
+
+
+def euler_to_quaternion(alpha, beta, gamma=0.0):
+    """
+    Convert Euler angles (alpha, beta, gamma) to quaternion representation.
+    """
+
+    w = np.cos(beta / 2.0) * np.cos((alpha + gamma) / 2.0)
+    x = -np.sin(beta / 2.0) * np.sin((alpha - gamma) / 2.0)
+    y = np.sin(beta / 2.0) * np.cos((alpha - gamma) / 2.0)
+    z = np.cos(beta / 2.0) * np.sin((alpha + gamma) / 2.0)
+
+    return quaternionic.array(w, x, y, z)
+
+
+def rot_to_quaternion(nx, ny, nz, alpha):
+    """
+    Get quaternionic representation of rotation given by axis (nx, ny, nz) and angle theta.
+    """
+
+    norm = np.sqrt(nx**2 + ny**2 + nz**2)
+    if norm == 0:
+        raise ValueError("Rotation axis cannot be the zero vector.")
+    nx /= norm
+    ny /= norm
+    nz /= norm
+
+    half_alpha = alpha / 2
+    w = np.cos(half_alpha)
+    x = nx * np.sin(half_alpha)
+    y = ny * np.sin(half_alpha)
+    z = nz * np.sin(half_alpha)
+    return quaternionic.array(w, x, y, z)
 
 
 @numba.njit
@@ -140,9 +132,9 @@ def gen_mesh_ylm_jacob(
     Generate power-spaced mesh points, spherical harmonic values, and Jacobian.
 
     The mesh points are taken in between 0 and u_max in the radial direction,
-    and are evenly spaced in theta and phi directions. 
-    
-    The radial grid can be linear or power-law spaced depending on the power_a 
+    and are evenly spaced in theta and phi directions.
+
+    The radial grid can be linear or power-law spaced depending on the power_a
     parameter.
 
     Parameters
@@ -163,19 +155,17 @@ def gen_mesh_ylm_jacob(
     Returns
     -------
     u_xyz_list : np.ndarray
-        An array of shape (n_a*n_b*n_c, 3) representing Cartesian coordinates 
+        An array of shape (n_a*n_b*n_c, 3) representing Cartesian coordinates
         of the mesh points.
     y_lm_vals : dict
-        A dictionary with keys as (l, m) tuples and values as arrays of shape 
+        A dictionary with keys as (l, m) tuples and values as arrays of shape
         (n_b, n_c) representing spherical harmonic values.
     jacob_list : np.ndarray
         An array of shape (n_a,) representing Jacobian values for integration.
     """
 
     dcostheta = 2.0 / n_b
-    theta_list = np.arccos(
-        -np.linspace(-1.0 + dcostheta / 2, 1.0 - dcostheta / 2, n_b)
-    )
+    theta_list = np.arccos(-np.linspace(-1.0 + dcostheta / 2, 1.0 - dcostheta / 2, n_b))
     dphi = 2 * np.pi / n_c
     phi_list = np.linspace(dphi / 2, 2 * np.pi - dphi / 2, n_c)
 
@@ -220,13 +210,13 @@ def gen_log_mesh_ylm_jacob(
     n_a: int,
     n_b: int,
     n_c: int,
-    eps: float = 0.,
+    eps: float = 0.0,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Generate log-spaced mesh points, spherical harmonic values, and Jacobian.
 
-    The mesh points are taken evenly in logarithmic scale in between eps*u_max 
-    and u_max in the radial direction, and are evenly spaced in theta and phi 
+    The mesh points are taken evenly in logarithmic scale in between eps*u_max
+    and u_max in the radial direction, and are evenly spaced in theta and phi
     directions.
 
     Parameters
@@ -247,19 +237,17 @@ def gen_log_mesh_ylm_jacob(
     Returns
     -------
     u_xyz_list : np.ndarray
-        An array of shape (n_a*n_b*n_c, 3) representing Cartesian coordinates 
+        An array of shape (n_a*n_b*n_c, 3) representing Cartesian coordinates
         of the mesh points.
     y_lm_vals : dict
-        A dictionary with keys as (l, m) tuples and values as arrays of shape 
+        A dictionary with keys as (l, m) tuples and values as arrays of shape
         (n_b, n_c) representing spherical harmonic values.
     jacob_list : np.ndarray
         An array of shape (n_a,) representing Jacobian values for integration.
     """
 
     dcostheta = 2.0 / n_b
-    theta_list = np.arccos(
-        -np.linspace(-1.0 + dcostheta / 2, 1.0 - dcostheta / 2, n_b)
-    )
+    theta_list = np.arccos(-np.linspace(-1.0 + dcostheta / 2, 1.0 - dcostheta / 2, n_b))
     dphi = 2 * np.pi / n_c
     phi_list = np.linspace(dphi / 2, 2 * np.pi - dphi / 2, n_c)
 
@@ -276,9 +264,10 @@ def gen_log_mesh_ylm_jacob(
     da = 1.0 / n_a
     a_list = np.linspace(da / 2, 1.0 - da / 2, n_a)
 
-    length = np.log(1. / eps)
-    r_list = eps * np.exp(a_list * length)
-    jacob_list = r_list**2 * (r_list * length * da) * dcostheta * dphi
+    length = -np.log(eps)
+    r_list = np.exp(length * a_list + np.log(eps))
+    dr_da = length * r_list
+    jacob_list = r_list**2 * (dr_da * da) * dcostheta * dphi
 
     u_sph_list = np.array(
         [
@@ -335,13 +324,17 @@ def get_wavelet_boundary(n, n_a, power_a=1) -> tuple[int, int, int]:
         x_min, x_mid, x_max = basis_funcs.haar_support(n)
         # Linear or power-law grid
         if power_a == 1:
-            r_min_idx = int(x_min * n_a)
-            r_mid_idx = int(x_mid * n_a)
-            r_max_idx = int(x_max * n_a)
+            r_min_idx = int(round(x_min * n_a))
+            r_mid_idx = int(round(x_mid * n_a))
+            r_max_idx = int(round(x_max * n_a))
         else:
-            r_min_idx = int(np.power(x_min, 1.0 / power_a) * n_a)
-            r_mid_idx = int(np.power(x_mid, 1.0 / power_a) * n_a)
-            r_max_idx = int(np.power(x_max, 1.0 / power_a) * n_a)
+            r_min_idx = int(round(np.power(x_min, 1.0 / power_a) * n_a))
+            r_mid_idx = int(round(np.power(x_mid, 1.0 / power_a) * n_a))
+            r_max_idx = int(round(np.power(x_max, 1.0 / power_a) * n_a))
+
+        r_min_idx = max(0, min(r_min_idx, n_a))
+        r_mid_idx = max(r_min_idx, min(r_mid_idx, n_a))
+        r_max_idx = max(r_mid_idx, min(r_max_idx, n_a))
 
     return r_min_idx, r_mid_idx, r_max_idx
 
@@ -374,9 +367,16 @@ def get_wavelet_boundary_log(n, n_a, eps) -> tuple[int, int, int]:
     else:
         x_min, x_mid, x_max = basis_funcs.haar_support_log(n, eps)
         length = np.log(1.0 / eps)
-        r_min_idx = int(np.log(x_min / eps) / (length / n_a))
-        r_mid_idx = int(np.log(x_mid / eps) / (length / n_a))
-        r_max_idx = int(np.log(x_max / eps) / (length / n_a))
+        # r_min_idx = int((np.log(x_min / eps) / (length / n_a)))
+        # r_mid_idx = int((np.log(x_mid / eps) / (length / n_a)))
+        # r_max_idx = int((np.log(x_max / eps) / (length / n_a)))
+        r_min_idx = int(round(np.log(x_min / eps) / (length / n_a)))
+        r_mid_idx = int(round(np.log(x_mid / eps) / (length / n_a)))
+        r_max_idx = int(round(np.log(x_max / eps) / (length / n_a)))
+
+        r_min_idx = max(0, min(r_min_idx, n_a))
+        r_mid_idx = max(r_min_idx, min(r_mid_idx, n_a))
+        r_max_idx = max(r_mid_idx, min(r_max_idx, n_a))
 
     return r_min_idx, r_mid_idx, r_max_idx
 
@@ -412,8 +412,6 @@ def proj_integrate_3d(
         The result of the 3D integration.
     """
     n_r, n_theta, n_phi = func_vals.shape
-    assert y_lm_vals.shape == (n_theta, n_phi)
-    assert jacob_vals.shape[0] == n_r
     total = 0.0
     for i in range(n_r):
         temp = 0.0
@@ -421,6 +419,13 @@ def proj_integrate_3d(
             for k in range(n_phi):
                 temp += func_vals[i, j, k] * y_lm_vals[j, k]
         total += temp * jacob_vals[i]
+
+    # weighted_vals = func_vals * y_lm_vals[np.newaxis, :, :]
+    # # angular_integral = np.sum(weighted_vals, axis=(1, 2))
+    # temp_sum = np.sum(weighted_vals, axis=2)
+    # angular_integral = np.sum(temp_sum, axis=1)
+    # total = np.sum(angular_integral * jacob_vals)
+
     return total * haar_vals
 
 
@@ -434,7 +439,7 @@ def proj_get_f_lm_n(
     n_a: int,
     power_a: float = 1,
     log_wavelet: bool = False,
-    eps: float = 1.,
+    eps: float = 1.0,
 ) -> dict[tuple[int, int, int], float]:
     """
     Project function values onto basis functions to obtain f_nlm coefficients.
@@ -464,7 +469,7 @@ def proj_get_f_lm_n(
     Returns
     -------
     dict[tuple[int, int, int], float]
-        A dictionary with keys as (n, l, m) tuples and values as the 
+        A dictionary with keys as (n, l, m) tuples and values as the
         corresponding f_nlm coefficients.
     """
 
@@ -475,9 +480,7 @@ def proj_get_f_lm_n(
         # Get wavelet values and boundaries
         if log_wavelet:
             value = basis_funcs.haar_value_log(n, eps=eps, p=2)
-            r_min_idx, r_mid_idx, r_max_idx = get_wavelet_boundary_log(
-                n, n_a, eps=eps
-            )   
+            r_min_idx, r_mid_idx, r_max_idx = get_wavelet_boundary_log(n, n_a, eps=eps)
         else:
             value = basis_funcs.haar_value(n, dim=3)
             r_min_idx, r_mid_idx, r_max_idx = get_wavelet_boundary(
@@ -507,5 +510,167 @@ def proj_get_f_lm_n(
                     y_lm_vals[(l, m)],
                     jacob_vals[r_mid_idx:r_max_idx],
                 )
+
+    return f_lm_n
+
+
+def gen_quad_angular_grid(
+    lm_list: list[tuple[int, int]],
+    n_gl: int,
+    n_phi: int,
+) -> tuple[np.ndarray, np.ndarray, float]:
+    """
+    Precompute angular quadrature nodes and weighted spherical harmonics
+    for the quad-based projection.
+
+    Uses Gauss-Legendre quadrature for cos(theta) and uniform nodes for phi.
+    Analogous to gen_mesh_ylm_jacob but for the quad-based method.
+
+    Parameters
+    ----------
+    lm_list : list of tuples
+        List of (l, m) tuples.
+    n_gl : int
+        Number of Gauss-Legendre nodes for cos(theta).
+    n_phi : int
+        Number of uniform nodes for phi.
+
+    Returns
+    -------
+    hat_v : np.ndarray
+        Unit direction vectors at angular nodes, shape (n_gl * n_phi, 3).
+    ylm_weighted : np.ndarray
+        Spherical harmonics weighted by GL weights, shape (n_lm, n_gl * n_phi).
+    dphi : float
+        Uniform phi step size (phi quadrature weight).
+    """
+    cos_theta_nodes, cos_theta_weights = np.polynomial.legendre.leggauss(n_gl)
+    theta_nodes = np.arccos(cos_theta_nodes)
+    sin_theta_nodes = np.sqrt(1.0 - cos_theta_nodes**2)
+
+    dphi = 2 * np.pi / n_phi
+    phi_nodes = np.linspace(dphi / 2, 2 * np.pi - dphi / 2, n_phi)
+    cos_phi_nodes = np.cos(phi_nodes)
+    sin_phi_nodes = np.sin(phi_nodes)
+
+    # Unit direction vectors: hat_v[i] = (sin_theta*cos_phi, sin_theta*sin_phi, cos_theta)
+    hat_v = np.empty((n_gl * n_phi, 3), dtype=np.float64)
+    for i_th in range(n_gl):
+        for i_phi in range(n_phi):
+            idx = i_th * n_phi + i_phi
+            hat_v[idx, 0] = sin_theta_nodes[i_th] * cos_phi_nodes[i_phi]
+            hat_v[idx, 1] = sin_theta_nodes[i_th] * sin_phi_nodes[i_phi]
+            hat_v[idx, 2] = cos_theta_nodes[i_th]
+
+    ang_weights = np.repeat(cos_theta_weights, n_phi)
+
+    ylm_flat = np.zeros((len(lm_list), n_gl * n_phi), dtype=np.float64)
+    for idx_lm, (l, m) in enumerate(lm_list):
+        for i_th in range(n_gl):
+            for i_phi in range(n_phi):
+                idx = i_th * n_phi + i_phi
+                ylm_flat[idx_lm, idx] = vsdm.ylm_real(
+                    l, m, theta_nodes[i_th], phi_nodes[i_phi]
+                )
+
+    ylm_weighted = ylm_flat * ang_weights[np.newaxis, :]
+    return hat_v, ylm_weighted, dphi
+
+
+def proj_get_f_lm_n_quad(
+    n_max: int,
+    lm_list: list[tuple[int, int]],
+    vdf_func,
+    vdf_params: dict,
+    v_max: float,
+    hat_v: np.ndarray,
+    ylm_weighted: np.ndarray,
+    dphi: float,
+    epsabs: float = 1e-8,
+    epsrel: float = 1e-8,
+    limit: int = 200,
+    verbose: bool = False,
+) -> np.ndarray:
+    """
+    Project a VDF onto the spherical wavelet basis using adaptive radial
+    quadrature (scipy.integrate.quad).
+
+    Analogous to proj_get_f_lm_n but uses scipy.integrate.quad for the
+    radial integral instead of a precomputed grid sum.
+
+    Parameters
+    ----------
+    n_max : int
+        Maximum radial Haar wavelet order.
+    lm_list : list of tuples
+        List of (l, m) tuples.
+    vdf_func : callable
+        The VDF function, must accept (v_xyz, **vdf_params).
+    vdf_params : dict
+        Parameters passed to vdf_func.
+    v_max : float
+        Velocity scale; physical velocity is v_max * r * hat_v.
+    hat_v : np.ndarray
+        Unit direction vectors at angular nodes, shape (n_ang, 3).
+    ylm_weighted : np.ndarray
+        GL-weighted spherical harmonics, shape (n_lm, n_ang).
+    dphi : float
+        Uniform phi step size (phi quadrature weight).
+    epsabs : float
+        Absolute tolerance for scipy.integrate.quad.
+    epsrel : float
+        Relative tolerance for scipy.integrate.quad.
+    limit : int
+        Max adaptive subdivisions for scipy.integrate.quad.
+    verbose : bool
+        If True, print progress per wavelet index n.
+
+    Returns
+    -------
+    np.ndarray
+        Array of shape (n_lm, n_max + 1) with the projection coefficients.
+    """
+    import warnings
+    from scipy import integrate
+
+    n_ang = hat_v.shape[0]
+    f_lm_n = np.zeros((len(lm_list), n_max + 1), dtype=np.float64)
+
+    for n in range(n_max + 1):
+
+        if n == 0:
+            intervals = [(0.0, 1.0)]
+            haar_vals = [basis_funcs.haar_value(0, dim=3)[0]]
+        else:
+            x_min, x_mid, x_max = basis_funcs.haar_support(n)
+            a_n, neg_b_n = basis_funcs.haar_value(n, dim=3)
+            intervals = [(x_min, x_mid), (x_mid, x_max)]
+            haar_vals = [a_n, neg_b_n]
+
+        for idx_lm in range(len(lm_list)):
+            total = 0.0
+            ylm_w = ylm_weighted[idx_lm]
+
+            for (r_lo, r_hi), h_val in zip(intervals, haar_vals):
+                if r_hi <= r_lo:
+                    continue
+
+                def radial_integrand(r, _ylm_w=ylm_w, _h=h_val):
+                    v_xyz_all = v_max * r * hat_v
+                    vdf_vals = np.array([
+                        vdf_func(v_xyz_all[i], **vdf_params) for i in range(n_ang)
+                    ])
+                    angular_sum = np.dot(vdf_vals, _ylm_w) * dphi
+                    return angular_sum * r**2 * _h
+
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore", integrate.IntegrationWarning)
+                    val, _ = integrate.quad(
+                        radial_integrand, r_lo, r_hi,
+                        epsabs=epsabs, epsrel=epsrel, limit=limit,
+                    )
+                total += val
+
+            f_lm_n[idx_lm, n] = total
 
     return f_lm_n
