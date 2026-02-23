@@ -17,13 +17,12 @@ def create_vE_vec(t):
     t : float
         Time in hours.
     """
-    phi = 2*const.PI*(t/24.0)
+    phi = 2 * const.PI * (t / 24.0)
 
-    vEx = const.VE*np.sin(const.THETA_E)*np.sin(phi)
-    vEy = const.VE*np.cos(const.THETA_E)*np.sin(const.THETA_E)*(np.cos(phi)-1)
-    vEz = const.VE*(
-        (np.sin(const.THETA_E)**2) * np.cos(phi)
-        + np.cos(const.THETA_E)**2
+    vEx = const.VE * np.sin(const.THETA_E) * np.sin(phi)
+    vEy = const.VE * np.cos(const.THETA_E) * np.sin(const.THETA_E) * (np.cos(phi) - 1)
+    vEz = const.VE * (
+        np.sin(const.THETA_E) ** 2 * np.cos(phi) + np.cos(const.THETA_E) ** 2
     )
 
     return np.array([vEx, vEy, vEz])
@@ -45,10 +44,9 @@ def get_energy_max(phonon_file, factor=1.2) -> float:
     float
         The maximum phonon energy in eV.
     """
-    _, ph_omega_delta_E = run_phonopy(
-        phonon_file, [[0., 0., 0.]])
+    _, ph_omega_delta_E = run_phonopy(phonon_file, [[0.0, 0.0, 0.0]])
 
-    max_delta_E = factor*np.amax(ph_omega_delta_E)
+    max_delta_E = factor * np.amax(ph_omega_delta_E)
 
     return max_delta_E
 
@@ -72,10 +70,9 @@ def compute_q_cut(phonon_file, atom_masses, factor=10.0) -> float:
         The computed q cut value.
     """
 
-    _, ph_omega = run_phonopy(
-        phonon_file, np.array([[0., 0., 0.]]))
+    _, ph_omega = run_phonopy(phonon_file, np.array([[0.0, 0.0, 0.0]]))
 
-    q_cut = factor*np.sqrt(np.amax(atom_masses)*np.amax(ph_omega))
+    q_cut = factor * np.sqrt(np.amax(atom_masses) * np.amax(ph_omega))
 
     return q_cut
 
@@ -97,20 +94,20 @@ def run_phonopy(phonon_file, k_mesh):
         A tuple containing eigenvectors and frequencies in eV.
     """
 
-    # run phonopy in mesh mode 
+    # run phonopy in mesh mode
     phonon_file.run_qpoints(k_mesh, with_eigenvectors=True)
 
     n_k = len(k_mesh)
 
     mesh_dict = phonon_file.get_qpoints_dict()
 
-    eigenvectors_pre = mesh_dict['eigenvectors']
+    eigenvectors_pre = mesh_dict["eigenvectors"]
 
     # convert frequencies to correct units
-    omega = 2*const.PI*(const.THz_To_eV)*mesh_dict['frequencies']
+    omega = 2 * const.PI * (const.THz_To_eV) * mesh_dict["frequencies"]
 
     num_atoms = len(phonon_file.primitive)
-    num_modes = 3*num_atoms 
+    num_modes = 3 * num_atoms
 
     # q, nu, i, alpha
     eigenvectors = np.zeros((n_k, num_modes, num_atoms, 3), dtype=complex)
@@ -119,7 +116,8 @@ def run_phonopy(phonon_file, k_mesh):
     for q in range(n_k):
         for nu in range(num_modes):
             eigenvectors[q][nu][:][:] = np.array_split(
-                    eigenvectors_pre[q].T[nu], num_atoms)
+                eigenvectors_pre[q].T[nu], num_atoms
+            )
 
     return [eigenvectors, omega]
 
@@ -134,14 +132,14 @@ def run_phonopy(phonon_file, k_mesh):
 
 #     else:
 
-#         if proc_id == root_process: 
+#         if proc_id == root_process:
 
 #             print('\tThere is no BORN file for '+material)
 #             print()
 
 #         born_exists = False
 
-#     if born_exists: 
+#     if born_exists:
 
 #         phonon_file = phonopy.load(
 #                             supercell_matrix    = supercell,
@@ -159,7 +157,7 @@ def run_phonopy(phonon_file, k_mesh):
 #             print('\tNo BORN file found for : '+material)
 
 #         raise NotImplementedError("Phonopy utility: Loading without BORN file is not implemented.")
-    
+
 #         # phonon_file = phonopy.load(
 #         #                     supercell_matrix    = supercell_data[material],
 #         #                     primitive_matrix    = 'auto',
@@ -194,54 +192,67 @@ def get_phonon_file_data(phonon_file, born_exists):
     """
 
     num_atoms = len(phonon_file.primitive)
-    num_modes = 3*num_atoms 
+    num_modes = 3 * num_atoms
 
     A_list = phonon_file.primitive.masses
     Z_list = phonon_file.primitive.numbers
 
-    eq_positions_XYZ = const.Ang_To_inveV*phonon_file.primitive.positions
+    eq_positions_XYZ = const.Ang_To_inveV * phonon_file.primitive.positions
 
-    atom_masses = const.AMU_To_eV*phonon_file.primitive.masses
+    atom_masses = const.AMU_To_eV * phonon_file.primitive.masses
 
     primitive_mat = phonon_file.primitive.cell
 
-    pos_red_to_XYZ = const.Ang_To_inveV*np.transpose(primitive_mat)
+    pos_red_to_XYZ = const.Ang_To_inveV * np.transpose(primitive_mat)
     pos_XYZ_to_red = np.linalg.inv(pos_red_to_XYZ)
 
     a_vec = np.matmul(pos_red_to_XYZ, [1, 0, 0])
     b_vec = np.matmul(pos_red_to_XYZ, [0, 1, 0])
     c_vec = np.matmul(pos_red_to_XYZ, [0, 0, 1])
 
-    recip_lat_a = 2*const.PI*(np.cross(b_vec, c_vec))/(np.matmul(a_vec, np.cross(b_vec, c_vec)))
-    recip_lat_b = 2*const.PI*(np.cross(c_vec, a_vec))/(np.matmul(b_vec, np.cross(c_vec, a_vec)))
-    recip_lat_c = 2*const.PI*(np.cross(a_vec, b_vec))/(np.matmul(c_vec, np.cross(a_vec, b_vec)))
+    recip_lat_a = (
+        2
+        * const.PI
+        * (np.cross(b_vec, c_vec))
+        / (np.matmul(a_vec, np.cross(b_vec, c_vec)))
+    )
+    recip_lat_b = (
+        2
+        * const.PI
+        * (np.cross(c_vec, a_vec))
+        / (np.matmul(b_vec, np.cross(c_vec, a_vec)))
+    )
+    recip_lat_c = (
+        2
+        * const.PI
+        * (np.cross(a_vec, b_vec))
+        / (np.matmul(c_vec, np.cross(a_vec, b_vec)))
+    )
 
     recip_red_to_XYZ = np.transpose([recip_lat_a, recip_lat_b, recip_lat_c])
     recip_XYZ_to_red = np.linalg.inv(recip_red_to_XYZ)
 
     if born_exists:
-
-        born       = phonon_file.nac_params['born']
-        dielectric = phonon_file.nac_params['dielectric']
+        born = phonon_file.nac_params["born"]
+        dielectric = phonon_file.nac_params["dielectric"]
 
     else:
-
-        born       = np.zeros((num_atoms, 3, 3))
+        born = np.zeros((num_atoms, 3, 3))
         dielectric = np.identity(3)
 
     return {
-        'num_atoms': num_atoms,
-        'num_modes': num_modes,
-        'pos_red_to_XYZ': pos_red_to_XYZ,
-        'pos_XYZ_to_red': pos_XYZ_to_red,
-        'recip_red_to_XYZ': recip_red_to_XYZ,
-        'recip_XYZ_to_red': recip_XYZ_to_red,
-        'eq_positions_XYZ': eq_positions_XYZ,
-        'atom_masses': atom_masses,
-        'A_list': A_list,
-        'Z_list': Z_list,
-        'born': born,
-        'dielectric': dielectric
+        "num_atoms": num_atoms,
+        "num_modes": num_modes,
+        "pos_red_to_XYZ": pos_red_to_XYZ,
+        "pos_XYZ_to_red": pos_XYZ_to_red,
+        "recip_red_to_XYZ": recip_red_to_XYZ,
+        "recip_XYZ_to_red": recip_XYZ_to_red,
+        "eq_positions_XYZ": eq_positions_XYZ,
+        "atom_masses": atom_masses,
+        "A_list": A_list,
+        "Z_list": Z_list,
+        "born": born,
+        "dielectric": dielectric,
     }
 
 
@@ -311,14 +322,14 @@ def get_kG_from_q_red(q_red_vec, q_red_to_XYZ):
     """
     Parameters
     ----------
-    q_red_vec : 
+    q_red_vec :
         q vector in reduced coordinates
-    q_red_to_XYZ : 
+    q_red_to_XYZ :
         matrix converting q in reduced coordinates to XYZ
 
     Returns
     -------
-    output : 
+    output :
         [k_red_vec, G_red_vec]: the k and G vectors in reduced coordinates
 
     """
@@ -381,7 +392,6 @@ def get_kG_from_q_red(q_red_vec, q_red_to_XYZ):
     first = True
 
     for vec in set_of_closest_G_red:
-
         # diff_vec = q_XYZ_vec - q_red_to_XYZ @ vec
         diff_vec = [
             q_XYZ_vec[0]
@@ -478,7 +488,6 @@ def get_kG_from_q_XYZ(q_XYZ_vec, q_red_to_XYZ) -> tuple[np.ndarray, np.ndarray]:
     first = True
 
     for vec in set_of_closest_G_red:
-
         vec = np.ascontiguousarray(vec)
         diff_vec = q_XYZ_vec - q_red_to_XYZ @ vec
 
@@ -525,7 +534,6 @@ def get_kG_list_from_q_XYZ_list(
     G_xyz_list = np.zeros((n_q, 3), dtype=np.float64)
 
     for i_q in numba.prange(n_q):
-
         q_XYZ = q_XYZ_list[i_q]
 
         k_red_vec, G_red_vec = get_kG_from_q_XYZ(q_XYZ, recip_red_to_XYZ)
@@ -570,8 +578,8 @@ def get_G_eigenvectors_omega_from_q_XYZ(
     return G_XYZ_list, ph_eigenvectors, ph_omega
 
 
-# def get_q_max(q_max, q_cut_option=False, 
-#               phonon_file=None, atom_masses=None, 
+# def get_q_max(q_max, q_cut_option=False,
+#               phonon_file=None, atom_masses=None,
 #               verbose=True):
 #     """
 #     Returns q_max based on input and Debye-Waller factor.
@@ -668,12 +676,13 @@ def get_q_max(material_input: str, factor: float = 10.0):
     return compute_q_cut(phonon_file, phonopy_params["atom_masses"], factor=factor)
 
 
-def calculate_W_tensor(phonon_file, num_atoms, atom_masses,
-                       n_k_1, n_k_2, n_k_3, q_red_to_XYZ):
+def calculate_W_tensor(
+    phonon_file, num_atoms, atom_masses, n_k_1, n_k_2, n_k_3, q_red_to_XYZ
+):
     """
-    Calculate the W tensor, 
-    which is related to the Debye-Waller factor by q.W.q = DW_factor, 
-    based on a Monkhort-Pack mesh 
+    Calculate the W tensor,
+    which is related to the Debye-Waller factor by q.W.q = DW_factor,
+    based on a Monkhort-Pack mesh
     with total number of k points < n_k_1*n_k_2*n_k_3
 
     Returns
@@ -688,15 +697,13 @@ def calculate_W_tensor(phonon_file, num_atoms, atom_masses,
     for i in range(n_k_1):
         for j in range(n_k_2):
             for k in range(n_k_3):
-
                 q_red_vec = []
 
-                q_red_vec.append((2.0*i - n_k_1 + 1.0)/n_k_1)
-                q_red_vec.append((2.0*j - n_k_2 + 1.0)/n_k_2)
-                q_red_vec.append((2.0*k - n_k_3 + 1.0)/n_k_3)
+                q_red_vec.append((2.0 * i - n_k_1 + 1.0) / n_k_1)
+                q_red_vec.append((2.0 * j - n_k_2 + 1.0) / n_k_2)
+                q_red_vec.append((2.0 * k - n_k_3 + 1.0) / n_k_3)
 
-                [k_vec, G_vec] = get_kG_from_q_red(
-                    q_red_vec, q_red_to_XYZ)
+                [k_vec, G_vec] = get_kG_from_q_red(q_red_vec, q_red_to_XYZ)
 
                 if G_vec[0] == 0.0 and G_vec[1] == 0.0 and G_vec[2] == 0.0:
                     n_k_tot += 1
@@ -709,22 +716,28 @@ def calculate_W_tensor(phonon_file, num_atoms, atom_masses,
 
     for j in range(num_atoms):
         for k in range(n_k_tot):
-            for nu in range(3*num_atoms):
+            for nu in range(3 * num_atoms):
                 for a in range(3):
                     for b in range(3):
-
                         W_tensor[j][a][b] += (
-                            (4.0*atom_masses[j]*n_k_tot*omega[k, nu])**(-1) *
-                            eigenvectors[k, nu, j, a] *
-                            np.conj(eigenvectors[k, nu, j, b])
+                            (4.0 * atom_masses[j] * n_k_tot * omega[k, nu]) ** (-1)
+                            * eigenvectors[k, nu, j, a]
+                            * np.conj(eigenvectors[k, nu, j, b])
                         )
 
     return np.array(W_tensor)
 
 
-def form_factor(q_XYZ_list: np.ndarray,
-                energy_threshold: float, energy_bin_width: float, energy_max: float,
-                numerics_params, phonopy_params, c_dict, phonon_file) -> np.ndarray:
+def form_factor(
+    q_XYZ_list: np.ndarray,
+    energy_threshold: float,
+    energy_bin_width: float,
+    energy_max: float,
+    numerics_params,
+    phonopy_params,
+    c_dict,
+    phonon_file,
+) -> np.ndarray:
     """
     Calculate the form factor for given q vectors and energy bins.
 
@@ -755,100 +768,129 @@ def form_factor(q_XYZ_list: np.ndarray,
 
     # Prepare G, epsilon, omega, W(q)
     G_xyz_list, ph_eigenvectors, ph_omega = get_G_eigenvectors_omega_from_q_XYZ(
-        q_XYZ_list, phonon_file, phonopy_params)
+        q_XYZ_list, phonon_file, phonopy_params
+    )
 
-    W_tensor = calculate_W_tensor(phonon_file,
-                                  phonopy_params['num_atoms'],
-                                  phonopy_params['atom_masses'],
-                                  numerics_params['n_DW_x'],
-                                  numerics_params['n_DW_y'],
-                                  numerics_params['n_DW_z'],
-                                  phonopy_params['recip_red_to_XYZ'])
+    W_tensor = calculate_W_tensor(
+        phonon_file,
+        phonopy_params["num_atoms"],
+        phonopy_params["atom_masses"],
+        numerics_params["n_DW_x"],
+        numerics_params["n_DW_y"],
+        numerics_params["n_DW_z"],
+        phonopy_params["recip_red_to_XYZ"],
+    )
 
-    fe0 = c_dict[1]['e']
-    fn0 = c_dict[1]['n']
-    fp0 = c_dict[1]['p']
+    fe0 = c_dict[1]["e"]
+    fn0 = c_dict[1]["n"]
+    fp0 = c_dict[1]["p"]
 
-    dielectric = phonopy_params['dielectric']
-    atom_masses = phonopy_params['atom_masses']
-    num_modes = phonopy_params['num_modes']
-    num_atoms = phonopy_params['num_atoms']
-    eq_positions_XYZ = phonopy_params['eq_positions_XYZ']
+    dielectric = phonopy_params["dielectric"]
+    atom_masses = phonopy_params["atom_masses"]
+    num_modes = phonopy_params["num_modes"]
+    num_atoms = phonopy_params["num_atoms"]
+    eq_positions_XYZ = phonopy_params["eq_positions_XYZ"]
 
-    A_list = phonopy_params['A_list']
-    Z_list = phonopy_params['Z_list']
-    born = phonopy_params['born']
+    A_list = phonopy_params["A_list"]
+    Z_list = phonopy_params["Z_list"]
+    born = phonopy_params["born"]
 
     form_factor_bin_vals = _form_factor_numba(
-        q_XYZ_list, G_xyz_list, ph_eigenvectors, ph_omega,
-        energy_threshold, energy_bin_width, energy_max,
-        W_tensor, fe0, fn0, fp0,
-        dielectric, num_modes, num_atoms, eq_positions_XYZ,
-        A_list, Z_list, born, atom_masses
+        q_XYZ_list,
+        G_xyz_list,
+        ph_eigenvectors,
+        ph_omega,
+        energy_threshold,
+        energy_bin_width,
+        energy_max,
+        W_tensor,
+        fe0,
+        fn0,
+        fp0,
+        dielectric,
+        num_modes,
+        num_atoms,
+        eq_positions_XYZ,
+        A_list,
+        Z_list,
+        born,
+        atom_masses,
     )
 
     return form_factor_bin_vals
 
 
 @numba.njit
-def _form_factor_numba(q_xyz_list, G_xyz_list, ph_eigenvectors, ph_omega,
-                      energy_threshold, energy_bin_width, energy_max,
-                      W_tensor, fe0, fn0, fp0,
-                      dielectric, num_modes, num_atoms, eq_positions_XYZ,
-                      A_list, Z_list, born, atom_masses) -> np.ndarray:
+def _form_factor_numba(
+    q_xyz_list,
+    G_xyz_list,
+    ph_eigenvectors,
+    ph_omega,
+    energy_threshold,
+    energy_bin_width,
+    energy_max,
+    W_tensor,
+    fe0,
+    fn0,
+    fp0,
+    dielectric,
+    num_modes,
+    num_atoms,
+    eq_positions_XYZ,
+    A_list,
+    Z_list,
+    born,
+    atom_masses,
+) -> np.ndarray:
 
     m_cell = np.sum(atom_masses)
 
-    n_bin = math.floor((energy_max-energy_threshold)/energy_bin_width) + 1
+    n_bin = math.floor((energy_max - energy_threshold) / energy_bin_width) + 1
 
     n_q = len(q_xyz_list)
 
     form_factor_bin_vals = np.zeros((n_bin, n_q), dtype=np.float64)
 
     for i_q in range(n_q):
-
         q_xyz = q_xyz_list[i_q]
         q0, q1, q2 = q_xyz[0], q_xyz[1], q_xyz[2]
-        q_hat = q_xyz / np.sqrt(q0*q0 + q1*q1 + q2*q2)
+        q_hat = q_xyz / np.sqrt(q0 * q0 + q1 * q1 + q2 * q2)
 
-        screen_val = 1.0/np.dot(q_hat, dielectric @ q_hat)
+        screen_val = 1.0 / np.dot(q_hat, dielectric @ q_hat)
 
         # Eq 50 in 1910.08092
-        fe = screen_val*fe0
-        fp = fp0 + (1.0 - screen_val)*fe0
+        fe = screen_val * fe0
+        fp = fp0 + (1.0 - screen_val) * fe0
         fn = fn0
 
         for nu in range(num_modes):
-
             energy_diff = ph_omega[i_q][nu]
 
             if energy_diff >= energy_threshold:
-
-                i_bin = math.floor(
-                    (energy_diff-energy_threshold)/energy_bin_width)
+                i_bin = math.floor((energy_diff - energy_threshold) / energy_bin_width)
 
                 S_nu = 0.0 + 0.0j
 
                 for j in range(num_atoms):
-
                     # dw_val_j = np.dot(q_xyz, W_tensor[j] @ q_xyz)
                     Wj = W_tensor[j]
                     dw_val_j = (
-                        q0*(Wj[0, 0]*q0 + Wj[0, 1]*q1 + Wj[0, 2]*q2)
-                        + q1*(Wj[1, 0]*q0 + Wj[1, 1]*q1 + Wj[1, 2]*q2)
-                        + q2*(Wj[2, 0]*q0 + Wj[2, 1]*q1 + Wj[2, 2]*q2)
+                        q0 * (Wj[0, 0] * q0 + Wj[0, 1] * q1 + Wj[0, 2] * q2)
+                        + q1 * (Wj[1, 0] * q0 + Wj[1, 1] * q1 + Wj[1, 2] * q2)
+                        + q2 * (Wj[2, 0] * q0 + Wj[2, 1] * q1 + Wj[2, 2] * q2)
                     )
 
-                    pos_phase_j = (
-                        1j)*np.dot(G_xyz_list[i_q], eq_positions_XYZ[j])
+                    pos_phase_j = (1j) * np.dot(G_xyz_list[i_q], eq_positions_XYZ[j])
 
                     A_j = A_list[j]
                     Z_j = Z_list[j]
 
-                    Y_j = (-fe*(born[j] @ q_xyz)
-                           + fe*Z_j*q_xyz
-                           + fn*(A_j - Z_j)*q_xyz
-                           + fp*Z_j*q_xyz)
+                    Y_j = (
+                        -fe * (born[j] @ q_xyz)
+                        + fe * Z_j * q_xyz
+                        + fn * (A_j - Z_j) * q_xyz
+                        + fp * Z_j * q_xyz
+                    )
 
                     # Y_dot_e_star = np.dot(Y_j, np.conj(ph_eigenvectors[i_q][nu][j]))
                     Y_dot_e_star = (
@@ -857,11 +899,14 @@ def _form_factor_numba(q_xyz_list, G_xyz_list, ph_eigenvectors, ph_omega,
                         + Y_j[2] * np.conj(ph_eigenvectors[i_q, nu, j, 2])
                     )
 
-                    S_nu += ((atom_masses[j])**(-0.5) *
-                             np.exp(-dw_val_j + pos_phase_j)*Y_dot_e_star)
+                    S_nu += (
+                        (atom_masses[j]) ** (-0.5)
+                        * np.exp(-dw_val_j + pos_phase_j)
+                        * Y_dot_e_star
+                    )
 
                 form_factor_bin_vals[i_bin, i_q] += np.real(
-                    0.5*(1.0/m_cell)*(1.0/energy_diff)*S_nu*np.conj(S_nu)
+                    0.5 * (1.0 / m_cell) * (1.0 / energy_diff) * S_nu * np.conj(S_nu)
                 )
 
     return form_factor_bin_vals

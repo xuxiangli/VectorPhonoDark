@@ -9,6 +9,7 @@ output/
 *.csv
 *.hdf5
 log/
+test/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

@@ -17,7 +17,7 @@ def main():
     project_root = Path(__file__).resolve().parent.parent
     material_input = str(project_root / "inputs" / "material" / "Al2O3" / "Al2O3.py")
 
-    factor = 10.0  # scale factor applied to the Brillouin-zone boundary momentum
+    factor = 4.0  # scale factor applied to the Brillouin-zone boundary momentum
 
     q_cutoff = get_q_max(material_input=material_input, factor=factor)
 

@@ -28,7 +28,7 @@ def main():
 
     # --- DM model ---
     mass_list = np.array([0.01, 0.03, 0.1, 0.3, 1, 3, 10, 30, 100]) * 10**6  # DM masses in eV
-    f_med = 2                        # mediator form factor power: F_med ~ (q0/q)^f_med
+    f_med = 2                        # mediator form factor power: F_med ~ (q0/q)^f_med, 2 for light mediator and 0 for heavy mediator
     # for hadrophilic
     # q0_fdm = mass_list * const.V0  # reference momentum transfer in eV
     # mass_sm = const.M_NUCL

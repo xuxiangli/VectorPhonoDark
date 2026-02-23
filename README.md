@@ -10,9 +10,8 @@ The calculation decomposes into three independent projections — the DM velocit
 
 The differential DM–phonon scattering rate per unit detector mass can be written schematically as (see arXiv:1910.08092 and 2502.17547)
 
-$$
-R({\cal R}) \propto \rho_\chi \sum_{s, \ell, m_v, m_q} G^{(\ell)}_{m_v m_q}({\cal R}) \sum_{n_v, n_q} \langle g_{\chi} \vert n_v \ell m_v \rangle \cdot \mathcal{I}^{(\ell)}_{n_v n_q}(F_{\text{DM}}^2 ; \Delta E_s) \cdot \langle n_q \ell m_q \vert f_{g \to s}^2 \rangle
-$$
+$$R({\cal R}) \propto \rho_\chi \sum_{s, \ell, m_v, m_q} G^{(\ell)}_{m_v m_q}({\cal R}) \sum_{n_v, n_q} \langle g_{\chi} \vert n_v \ell m_v \rangle \cdot \mathcal{I}^{(\ell)}_{n_v n_q}(F_{\text{DM}}^2 ; \Delta E_s) \cdot \langle n_q \ell m_q \vert f_{g \to s}^2 \rangle$$
+
 where:
 
 | Symbol | Description |
@@ -197,8 +196,8 @@ physics_params = {
 |-----------|----------|-------------|
 | `l_max` | `numerics_params` | Maximum angular momentum $\ell$; higher → better angular resolution |
 | `n_max` | `numerics_params` | Maximum radial wavelet index; higher → better radial resolution |
-| `n_grid` | `numerics_params` | `(n_r, n_θ, n_φ)` Monte Carlo grid for VDF/FF projection |
-| `q_max` | `numerics_params` | Upper momentum cutoff in eV; set by `2 m_χ (v_\text{esc} + v_E)` |
+| `n_grid` | `numerics_params` | $(n_r, n_θ, n_φ)$ Monte Carlo grid for VDF/FF projection |
+| `q_max` | `numerics_params` | Upper momentum cutoff in eV; set by $2 m_χ (v_\text{esc} + v_E)$ |
 | `log_wavelet` | `numerics_params` | Use logarithmic radial basis (recommended when $F_{\text{DM}} \propto q^{-n}$) |
 
 ---

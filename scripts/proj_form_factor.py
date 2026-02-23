@@ -43,7 +43,7 @@ def main():
             "l_max": 8,             # max angular momentum quantum number
             "n_max": 2**9 - 1,      # max radial wavelet index
             "n_grid": (2**9, 25, 25),  # (n_r, n_theta, n_phi) quadrature grid
-            "log_wavelet": True,    # use logarithmic radial wavelet basis
+            "log_wavelet": True,    # use logarithmic radial wavelet basis, True for light DM and False for heavy DM
         }
         input_params = {
             "material_input": str(project_root / "inputs" / "material" / "Al2O3" / "Al2O3.py"),
