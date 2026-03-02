@@ -431,9 +431,15 @@ class VDF(Fnlm):
             lm_list, v_max, n_a, n_b, n_c
         )
 
-        vdf_vals = np.array([vdf(v_vec, **vdf_params) for v_vec in v_xyz_list]).reshape(
-            n_a, n_b, n_c
-        )
+        try:
+            vdf_vals_flat = vdf(v_xyz_list, **vdf_params)
+            if not isinstance(vdf_vals_flat, np.ndarray) or vdf_vals_flat.shape != (len(v_xyz_list),):
+                raise ValueError("VDF output is not a 1D numpy array of the correct length")
+            vdf_vals = vdf_vals_flat.reshape(n_a, n_b, n_c)
+        except Exception:
+            vdf_vals = np.array([vdf(v_vec, **vdf_params) for v_vec in v_xyz_list]).reshape(
+                n_a, n_b, n_c
+            )
         del v_xyz_list
 
         if verbose:
