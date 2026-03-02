@@ -10,6 +10,8 @@ from . import constants as const
 from . import utility
 from .utility import C_GREEN, C_CYAN, C_RESET
 from . import physics
+import multiprocessing as mp
+from functools import partial
 
 # from . import analytic
 try:
@@ -1082,6 +1084,29 @@ class McalI:
         )
 
 
+def _process_mcalI_bin(
+    idx_bin,
+    physics_params,
+    numerics_params,
+    energy_threshold,
+    energy_bin_width,
+    n_bins,
+    verbose,
+):
+    if verbose:
+        if idx_bin % (n_bins // 5 + 1) == 0:
+            print(f"        Projecting energy bin {idx_bin}/{n_bins-1}...")
+
+    physics_params_copy = dict(physics_params)
+    physics_params_copy["energy"] = (
+        energy_threshold + (idx_bin + 0.5) * energy_bin_width
+    )
+
+    mcalI = McalI(physics_params_copy, numerics_params)
+    mcalI.project(verbose=False)
+    return idx_bin, mcalI
+
+
 class BinnedMcalI:
     """
     Binned McalI class.
@@ -1328,16 +1353,20 @@ class BinnedMcalI:
 
         n_bins = self.n_bins
 
-        for idx_bin in range(n_bins):
-            if verbose:
-                if idx_bin % (n_bins // 5 + 1) == 0:
-                    print(f"        Projecting energy bin {idx_bin}/{n_bins-1}...")
+        process_func = partial(
+            _process_mcalI_bin,
+            physics_params=physics_params,
+            numerics_params=numerics_params,
+            energy_threshold=self.energy_threshold,
+            energy_bin_width=self.energy_bin_width,
+            n_bins=n_bins,
+            verbose=verbose,
+        )
 
-            energy = self.energy_threshold + (idx_bin + 0.5) * self.energy_bin_width
-            physics_params["energy"] = energy
+        with mp.Pool() as pool:
+            results = pool.map(process_func, range(n_bins))
 
-            mcalI = McalI(physics_params, numerics_params)
-            mcalI.project(verbose=False)
+        for idx_bin, mcalI in results:
             self.mcalIs[idx_bin] = mcalI
 
         if verbose:
