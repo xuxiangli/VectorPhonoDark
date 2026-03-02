@@ -851,17 +851,33 @@ def _form_factor_numba(
 
     form_factor_bin_vals = np.zeros((n_bin, n_q), dtype=np.float64)
 
+    q0_arr = q_xyz_list[:, 0]
+    q1_arr = q_xyz_list[:, 1]
+    q2_arr = q_xyz_list[:, 2]
+
+    q_norm_arr = np.sqrt(q0_arr * q0_arr + q1_arr * q1_arr + q2_arr * q2_arr)
+    q_hat_0 = q0_arr / q_norm_arr
+    q_hat_1 = q1_arr / q_norm_arr
+    q_hat_2 = q2_arr / q_norm_arr
+
+    d0 = dielectric[0, 0] * q_hat_0 + dielectric[0, 1] * q_hat_1 + dielectric[0, 2] * q_hat_2
+    d1 = dielectric[1, 0] * q_hat_0 + dielectric[1, 1] * q_hat_1 + dielectric[1, 2] * q_hat_2
+    d2 = dielectric[2, 0] * q_hat_0 + dielectric[2, 1] * q_hat_1 + dielectric[2, 2] * q_hat_2
+
+    dot_res = q_hat_0 * d0 + q_hat_1 * d1 + q_hat_2 * d2
+    screen_val_arr = 1.0 / dot_res
+
+    # Eq 50 in 1910.08092
+    fe_arr = screen_val_arr * fe0
+    fp_arr = fp0 + (1.0 - screen_val_arr) * fe0
+    fn = fn0
+
     for i_q in range(n_q):
         q_xyz = q_xyz_list[i_q]
-        q0, q1, q2 = q_xyz[0], q_xyz[1], q_xyz[2]
-        q_hat = q_xyz / np.sqrt(q0 * q0 + q1 * q1 + q2 * q2)
+        q0, q1, q2 = q0_arr[i_q], q1_arr[i_q], q2_arr[i_q]
 
-        screen_val = 1.0 / np.dot(q_hat, dielectric @ q_hat)
-
-        # Eq 50 in 1910.08092
-        fe = screen_val * fe0
-        fp = fp0 + (1.0 - screen_val) * fe0
-        fn = fn0
+        fe = fe_arr[i_q]
+        fp = fp_arr[i_q]
 
         for nu in range(num_modes):
             energy_diff = ph_omega[i_q][nu]
