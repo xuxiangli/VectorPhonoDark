@@ -210,7 +210,7 @@ def gen_log_mesh_ylm_jacob(
     n_a: int,
     n_b: int,
     n_c: int,
-    eps: float = 0.0,
+    eps: float,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Generate log-spaced mesh points, spherical harmonic values, and Jacobian.
@@ -367,9 +367,6 @@ def get_wavelet_boundary_log(n, n_a, eps) -> tuple[int, int, int]:
     else:
         x_min, x_mid, x_max = basis_funcs.haar_support_log(n, eps)
         length = np.log(1.0 / eps)
-        # r_min_idx = int((np.log(x_min / eps) / (length / n_a)))
-        # r_mid_idx = int((np.log(x_mid / eps) / (length / n_a)))
-        # r_max_idx = int((np.log(x_max / eps) / (length / n_a)))
         r_min_idx = int(round(np.log(x_min / eps) / (length / n_a)))
         r_mid_idx = int(round(np.log(x_mid / eps) / (length / n_a)))
         r_max_idx = int(round(np.log(x_max / eps) / (length / n_a)))

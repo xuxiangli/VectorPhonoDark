@@ -42,11 +42,10 @@ def haar_lam_mu_to_n(lam: int, mu: int) -> int:
     output : int
         The order of the Haar wavelet.
     """
-    assert lam >= 0 and mu >= 0, "Haar wavelet: Scale and index must be non-negative."
-    assert mu < (1 << lam), "Haar wavelet: Index mu must be less than 2^lambda."
-    # n = 0 case, for completeness
     if lam == -1 and mu == -1:
         return 0
+    assert lam >= 0 and mu >= 0, "Haar wavelet: Scale and index must be non-negative."
+    assert mu < (1 << lam), "Haar wavelet: Index mu must be less than 2^lambda."
     n = (1 << lam) + mu
     return n
 

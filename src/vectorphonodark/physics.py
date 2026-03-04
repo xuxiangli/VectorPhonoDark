@@ -113,11 +113,12 @@ def run_phonopy(phonon_file, k_mesh):
     eigenvectors = np.zeros((n_k, num_modes, num_atoms, 3), dtype=complex)
 
     # sort the eigenvectors
-    for q in range(n_k):
-        for nu in range(num_modes):
-            eigenvectors[q][nu][:][:] = np.array_split(
-                eigenvectors_pre[q].T[nu], num_atoms
-            )
+    # for q in range(n_k):
+    #     for nu in range(num_modes):
+    #         eigenvectors[q][nu][:][:] = np.array_split(
+    #             eigenvectors_pre[q].T[nu], num_atoms
+    #         )
+    eigenvectors = eigenvectors_pre.transpose(0, 2, 1).reshape(n_k, num_modes, num_atoms, 3)
 
     return [eigenvectors, omega]
 
@@ -424,6 +425,7 @@ def get_kG_from_q_red(q_red_vec, q_red_to_XYZ):
             first = False
 
         if diff_vec_sq <= min_dist_sq:
+            min_dist_sq = diff_vec_sq
             min_vec = vec
 
     G_red_vec = min_vec
@@ -496,8 +498,9 @@ def get_kG_from_q_XYZ(q_XYZ_vec, q_red_to_XYZ) -> tuple[np.ndarray, np.ndarray]:
             min_vec = vec
             first = False
 
-        if np.dot(diff_vec, diff_vec) <= min_dist_sq:
-            min_dist_sq = np.dot(diff_vec, diff_vec)
+        diff_sq = np.dot(diff_vec, diff_vec)
+        if diff_sq <= min_dist_sq:
+            min_dist_sq = diff_sq
             min_vec = vec
 
     G_red_vec = min_vec
@@ -576,47 +579,6 @@ def get_G_eigenvectors_omega_from_q_XYZ(
     [ph_eigenvectors, ph_omega] = run_phonopy(phonon_file, k_red_list)
 
     return G_XYZ_list, ph_eigenvectors, ph_omega
-
-
-# def get_q_max(q_max, q_cut_option=False,
-#               phonon_file=None, atom_masses=None,
-#               verbose=True):
-#     """
-#     Returns q_max based on input and Debye-Waller factor.
-
-#     Parameters
-#     ----------
-#     q_max : float
-#         The initial maximum momentum transfer.
-#     q_cut_option : bool, optional
-#         Whether to compute q_cut based on Debye-Waller factor (default is False).
-#     phonon_file : Phonopy object, optional
-#         The phonopy object containing the phonon data (required if q_cut_option is True).
-#     atom_masses : array-like, optional
-#         The masses of the atoms (required if q_cut_option is True).
-#     verbose : bool, optional
-#         Whether to print verbose output (default is True).
-
-#     Returns
-#     -------
-#     float
-#         The adjusted maximum momentum transfer q_max.
-#     """
-
-#     if q_cut_option:
-#         q_cut = compute_q_cut(phonon_file, atom_masses)
-#         if q_cut <= q_max:
-#             q_max = q_cut
-#             if verbose:
-#                 print(f"    Adjusted q_max to {q_max:.4f} eV due to Debye Waller factor.")
-#         else:
-#             if verbose:
-#                 print(f"    Using specified q_max = {q_max:.4f} eV.")
-#     else:
-#         if verbose:
-#             print(f"    Using specified q_max = {q_max:.4f} eV.")
-
-#     return q_max
 
 
 def get_q_max(material_input: str, factor: float = 10.0):
@@ -712,18 +674,27 @@ def calculate_W_tensor(
 
     [eigenvectors, omega] = run_phonopy(phonon_file, k_list)
 
-    W_tensor = np.zeros((num_atoms, 3, 3), dtype=complex)
+    # W_tensor = np.zeros((num_atoms, 3, 3), dtype=complex)
 
-    for j in range(num_atoms):
-        for k in range(n_k_tot):
-            for nu in range(3 * num_atoms):
-                for a in range(3):
-                    for b in range(3):
-                        W_tensor[j][a][b] += (
-                            (4.0 * atom_masses[j] * n_k_tot * omega[k, nu]) ** (-1)
-                            * eigenvectors[k, nu, j, a]
-                            * np.conj(eigenvectors[k, nu, j, b])
-                        )
+    # for j in range(num_atoms):
+    #     for k in range(n_k_tot):
+    #         for nu in range(3 * num_atoms):
+    #             for a in range(3):
+    #                 for b in range(3):
+    #                     W_tensor[j][a][b] += (
+    #                         (4.0 * atom_masses[j] * n_k_tot * omega[k, nu]) ** (-1)
+    #                         * eigenvectors[k, nu, j, a]
+    #                         * np.conj(eigenvectors[k, nu, j, b])
+    #                     )
+    
+    # shape: (n_k_tot, num_modes, num_atoms)
+    inv_w = 1.0 / (4.0 * n_k_tot * omega[:, :, np.newaxis] * atom_masses[np.newaxis, np.newaxis, :])
+    # shape: (n_k_tot, num_modes, num_atoms, 3)
+    e = eigenvectors
+    # shape: (n_k_tot, num_modes, num_atoms, 3, 3)
+    outer = e[:, :, :, :, np.newaxis] * np.conj(e[:, :, :, np.newaxis, :])
+    # shape: (num_atoms, 3, 3)
+    W_tensor = np.sum(inv_w[:, :, :, np.newaxis, np.newaxis] * outer, axis=(0, 1))
 
     return np.array(W_tensor)
 
@@ -751,14 +722,14 @@ def form_factor(
         The width of each energy bin.
     energy_max : float
         The maximum energy difference.
-    phonon_file : Phonopy object
-        The Phonopy object containing the phonon data.
-    phonopy_params : dict
-        The phonopy parameters including dielectric matrix, born charges, etc.
     numerics_params: dict
         The numerical parameters including number of k-points in each direction.
+    phonopy_params : dict
+        The phonopy parameters including dielectric matrix, born charges, etc.
     c_dict: dict
         The coupling constants for electrons, protons, and neutrons.
+    phonon_file : Phonopy object
+        The Phonopy object containing the phonon data.
 
     Returns
     -------
@@ -851,22 +822,38 @@ def _form_factor_numba(
 
     form_factor_bin_vals = np.zeros((n_bin, n_q), dtype=np.float64)
 
+    q0_arr = q_xyz_list[:, 0]
+    q1_arr = q_xyz_list[:, 1]
+    q2_arr = q_xyz_list[:, 2]
+
+    q_norm_arr = np.sqrt(q0_arr * q0_arr + q1_arr * q1_arr + q2_arr * q2_arr)
+    q_hat_0 = q0_arr / q_norm_arr
+    q_hat_1 = q1_arr / q_norm_arr
+    q_hat_2 = q2_arr / q_norm_arr
+
+    d0 = dielectric[0, 0] * q_hat_0 + dielectric[0, 1] * q_hat_1 + dielectric[0, 2] * q_hat_2
+    d1 = dielectric[1, 0] * q_hat_0 + dielectric[1, 1] * q_hat_1 + dielectric[1, 2] * q_hat_2
+    d2 = dielectric[2, 0] * q_hat_0 + dielectric[2, 1] * q_hat_1 + dielectric[2, 2] * q_hat_2
+
+    dot_res = q_hat_0 * d0 + q_hat_1 * d1 + q_hat_2 * d2
+    screen_val_arr = 1.0 / dot_res
+
+    # Eq 50 in 1910.08092
+    fe_arr = screen_val_arr * fe0
+    fp_arr = fp0 + (1.0 - screen_val_arr) * fe0
+    fn = fn0
+
     for i_q in range(n_q):
         q_xyz = q_xyz_list[i_q]
-        q0, q1, q2 = q_xyz[0], q_xyz[1], q_xyz[2]
-        q_hat = q_xyz / np.sqrt(q0 * q0 + q1 * q1 + q2 * q2)
+        q0, q1, q2 = q0_arr[i_q], q1_arr[i_q], q2_arr[i_q]
 
-        screen_val = 1.0 / np.dot(q_hat, dielectric @ q_hat)
-
-        # Eq 50 in 1910.08092
-        fe = screen_val * fe0
-        fp = fp0 + (1.0 - screen_val) * fe0
-        fn = fn0
+        fe = fe_arr[i_q]
+        fp = fp_arr[i_q]
 
         for nu in range(num_modes):
             energy_diff = ph_omega[i_q][nu]
 
-            if energy_diff >= energy_threshold:
+            if energy_diff >= energy_threshold and energy_diff < energy_max:
                 i_bin = math.floor((energy_diff - energy_threshold) / energy_bin_width)
 
                 S_nu = 0.0 + 0.0j
@@ -886,7 +873,7 @@ def _form_factor_numba(
                     Z_j = Z_list[j]
 
                     Y_j = (
-                        -fe * (born[j] @ q_xyz)
+                        -fe * (q_xyz @ born[j])
                         + fe * Z_j * q_xyz
                         + fn * (A_j - Z_j) * q_xyz
                         + fp * Z_j * q_xyz
@@ -906,7 +893,9 @@ def _form_factor_numba(
                     )
 
                 form_factor_bin_vals[i_bin, i_q] += np.real(
-                    0.5 * (1.0 / m_cell) * (1.0 / energy_diff) * S_nu * np.conj(S_nu)
+                    0.5 * (1.0 / m_cell) * (1.0 / energy_diff) * (
+                        S_nu.real**2 + S_nu.imag**2
+                    )
                 )
 
     return form_factor_bin_vals

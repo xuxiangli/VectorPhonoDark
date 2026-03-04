@@ -8,7 +8,7 @@ cimport numpy as cnp
 cimport cython
 from cython.parallel import prange
 
-from libc.math cimport sqrt, log, exp, pow, floor, log2, fabs
+from libc.math cimport sqrt, log, exp, pow, floor, log2, fabs, log1p
 
 from scipy.special.cython_special cimport hyp2f1, spence, gamma
 
@@ -171,13 +171,13 @@ cdef double _c_alpha_int(double alpha, double x) noexcept nogil:
         return log((1.0 + x) / x) - 0.5 / x
     elif alpha_int == 0:
         val = spence(1.0 + x)
-        return (-0.25 * pow(log(x), 2) + log(x) * log(1.0 + x) + val)
+        return (-0.25 * pow(log(x), 2) + log(x) * log1p(x) + val)
     elif alpha_int == 1:
-        return 0.5 * x - log(1.0 + x)
+        return 0.5 * x - log1p(x)
     elif alpha_int == 2:
-        return (0.125 * x - 0.5) * x + 0.5 * log(1.0 + x)
+        return (0.125 * x - 0.5) * x + 0.5 * log1p(x)
     elif alpha_int > 1:
-        sum_val = pow(-1.0, alpha_int) * log(1.0 + x) / alpha + pow(1.0 + x, alpha_int) / (2.0 * alpha * alpha)
+        sum_val = pow(-1.0, alpha_int) * log1p(x) / alpha + pow(1.0 + x, alpha_int) / (2.0 * alpha * alpha)
         comb_alpha_j = alpha
         for j in range(1, alpha_int):
             # comb = (
@@ -575,17 +575,33 @@ def ilvq(int l_max,
     # Get memoryview for fast C access
     cdef double[:, :, ::1] ilvq_view = ilvq_array
     
-    cdef int ell, nv, nq
+    # cdef int ell, nv, nq
     
+    # with cython.nogil:
+    #     for ell in prange(l_max//l_mod + 1, schedule='dynamic'):
+    #         for nv in range(n_nv):
+    #             for nq in range(n_nq):
+    #                 
+    #                 ilvq_view[ell, nv, nq] = ilvq_analytic_c(
+    #                     ell*l_mod, nv, nq,
+    #                     v_max, q_max, log_wavelet_q, eps_q,
+    #                     a, b, qStar, vStar, factor
+    #                 )
+
+    cdef int n_ell = l_max // l_mod + 1
+    cdef int total = n_ell * n_nv * n_nq
+    cdef int idx, ell, nv, nq
+
     with cython.nogil:
-        for ell in prange(l_max//l_mod + 1, schedule='dynamic'):
-            for nv in range(n_nv):
-                for nq in range(n_nq):
-                    
-                    ilvq_view[ell, nv, nq] = ilvq_analytic_c(
-                        ell*l_mod, nv, nq,
-                        v_max, q_max, log_wavelet_q, eps_q,
-                        a, b, qStar, vStar, factor
-                    )
+        for idx in prange(total, schedule='dynamic'):
+            ell = (idx // (n_nv * n_nq)) * l_mod
+            nv = (idx // n_nq) % n_nv
+            nq = idx % n_nq
+
+            ilvq_view[ell//l_mod, nv, nq] = ilvq_analytic_c(
+                ell, nv, nq,
+                v_max, q_max, log_wavelet_q, eps_q,
+                a, b, qStar, vStar, factor
+            )
     
     return ilvq_array

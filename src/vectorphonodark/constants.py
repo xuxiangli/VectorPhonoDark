@@ -15,17 +15,19 @@ M_NUCL                   = 0.938*10**9
 
 # Conversion factors ###
 
-THz_To_eV                = 6.58*10**(-4)
+# THz_To_eV                = 6.58*10**(-4)
+THz_To_eV                = 6.58212*10**(-4)
 PI                       = np.pi
 Ang_To_inveV             = 5.06773*10**(-4)
 fm_To_inveV              = 5.06773*10**(-9)
-AMU_To_eV                = 9.31*10**8
-eV_to_AMU                = 1.074*10**-9
+# AMU_To_eV                = 9.31*10**8
+AMU_To_eV                = 9.31494*10**8
+eV_to_AMU                = 1.07354*10**-9
 g_over_cm3_to_eV_over_A3 = 5.6095*10**8
 kg_to_eV                 = 5.6095*10**35
 second_to_one_over_eV    = 1.51976*10**15
 inveV_to_cm              = 1.973*10**-5
-invAng_to_eV             = 1.97*10**3
+invAng_to_eV             = 1.973*10**3
 invcmet_To_eV            = 1.973*10**(-5)
 GeV_To_eV                = 10**9
 inveV_To_invGeV          = 10**9
