@@ -1,0 +1,84 @@
+[build-system]
+# scipy is needed at build time: analytic_cy.pyx cimports scipy.special.cython_special
+requires = ["setuptools>=77", "Cython>=3.0", "numpy>=1.26", "scipy>=1.10"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vectorphonodark"
+version = "1.0.0"
+description = "Dark matter-phonon scattering rates via the vector-space method"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.11"
+authors = [{ name = "Xu-Xiang Li" }]
+keywords = ["dark matter", "direct detection", "phonon", "wavelet"]
+classifiers = [
+    "Intended Audience :: Science/Research",
+    "Programming Language :: Python :: 3",
+    "Topic :: Scientific/Engineering :: Physics",
+]
+dependencies = [
+    "numpy>=1.26",
+    "scipy>=1.10",
+    "h5py>=3.0",
+    "numba>=0.60",
+    "phonopy>=2.20",
+    "vsdm>=0.4.4",
+    "quaternionic",
+]
+
+[project.urls]
+Repository = "https://github.com/xuxiangli/VectorPhonoDark"
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+vectorphonodark = ["py.typed"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py311"
+# Generated / compiled artifacts are not source. `inputs/` holds the
+# material/model/numerics templates (PhonoDark format, tab-indented, executed
+# via exec) -- user-editable config, not linted package source.
+extend-exclude = ["src/vectorphonodark/analytic_cy.c", "build", "inputs"]
+
+[tool.ruff.format]
+# The PhonoDark driver is kept byte-for-byte in its original formatting so
+# diffs against the PhonoDark side stay readable; everything else is formatted.
+exclude = ["scripts/reproduce_paper/modulation/2_pd.py"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "E741"]
+
+[tool.ruff.lint.per-file-ignores]
+# Paper-reproduction and example scripts: long formatted/plot lines are fine
+# (E501), and the PhonoDark reproduction scripts set up sys.path before their
+# imports (E402). The library itself (src/) is held to the full rule set.
+"scripts/**" = ["E501", "E402"]
+
+[tool.pyright]
+include = ["src"]
+typeCheckingMode = "basic"
+# The scientific dependencies ship no type information (no py.typed / stubs),
+# so pyright sees their values as Unknown. Suppress only that untyped-dependency
+# noise; the meaningful categories -- reportArgumentType, reportReturnType,
+# reportCallIssue, reportGeneralTypeIssues -- stay enforced.
+reportMissingModuleSource = "none"    # numba / vsdm / quaternionic: no bundled stubs
+reportPrivateImportUsage = "none"     # vsdm re-exports through private submodules
+reportUnknownVariableType = "none"
+reportUnknownMemberType = "none"
+reportUnknownArgumentType = "none"
+reportUnknownParameterType = "none"
+reportMissingTypeArgument = "none"
+reportAttributeAccessIssue = "none"   # dynamic attributes on exec'd config modules
+reportOptionalMemberAccess = "none"
+reportOptionalSubscript = "none"
+reportIndexIssue = "none"
+reportOperatorIssue = "none"
+reportUnusedVariable = "none"         # owned by ruff (F841)
