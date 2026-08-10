@@ -336,15 +336,16 @@ If you use `VectorPhonoDark` in your work, please cite the accompanying paper:
 
 > Xu-Xiang Li and Zhengkang Zhang,
 > *Logarithmic Wavelets for Dark Matter–Phonon Scattering*,
-> [arXiv:XXXX.XXXXX](https://arxiv.org/abs/XXXX.XXXXX).
+> [arXiv:2608.06452](https://arxiv.org/abs/2608.06452).
 
 ```bibtex
-@article{Li:2026xxx,
+@article{Li:2026jry,
     author = "Li, Xu-Xiang and Zhang, Zhengkang",
     title = "{Logarithmic Wavelets for Dark Matter--Phonon Scattering}",
-    eprint = "XXXX.XXXXX",
+    eprint = "2608.06452",
     archivePrefix = "arXiv",
     primaryClass = "hep-ph",
+    month = "8",
     year = "2026"
 }
 ```

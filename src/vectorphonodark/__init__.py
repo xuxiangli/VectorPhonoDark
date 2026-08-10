@@ -15,7 +15,7 @@ from importlib.metadata import version as _version
 try:
     __version__ = _version("vectorphonodark")
 except PackageNotFoundError:  # running from a checkout without installation
-    __version__ = "1.0.0+uninstalled"
+    __version__ = "1.0.1+uninstalled"
 
 from . import constants
 from .projection import (

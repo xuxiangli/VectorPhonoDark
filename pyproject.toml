@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "vectorphonodark"
-version = "1.0.0"
+version = "1.0.1"
 description = "Dark matter-phonon scattering rates via the vector-space method"
 readme = "README.md"
 license = "MIT"
